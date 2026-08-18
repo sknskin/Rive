@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# 로컬 검증 산출물 (스크린샷, 브라우저 도구, OMC 상태)
+# local verification artifacts (screenshots, browser tooling, OMC state)
+/.playwright-mcp/
+/.omc/
+/*.png
