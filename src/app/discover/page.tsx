@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { motion } from "motion/react";
+import MoodSheet from "@/components/discover/MoodSheet";
 import NotInterestedSheet from "@/components/discover/NotInterestedSheet";
 import OnboardingWizard from "@/components/discover/OnboardingWizard";
 import ProfileCard from "@/components/discover/ProfileCard";
@@ -37,6 +38,10 @@ export default function DiscoverPage() {
   const [aiError, setAiError] = useState("");
   const [missingKey, setMissingKey] = useState(false);
   const [notInterestedTarget, setNotInterestedTarget] = useState<string | null>(null);
+  const [moodOpen, setMoodOpen] = useState(false);
+  // 마지막 맞춤 조건 — 목록 헤더에 표시한다
+  // Last tailoring context — shown in the list header
+  const [lastContext, setLastContext] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     const repository = getRepository();
@@ -49,7 +54,8 @@ export default function DiscoverPage() {
       // Hide recommendations dismissed via feedback
       setRecommendations(
         loadedRecommendations.filter(
-          (item) => item.status === "active" || item.status === "want",
+          (item) =>
+            item.status === "active" || item.status === "want" || item.status === "liked",
         ),
       );
       setPhase(loadedPreference ? "main" : "intro");
@@ -102,6 +108,9 @@ export default function DiscoverPage() {
         traits: body.traits,
         recommendationFactors: body.recommendationFactors,
         evidence: body.evidence,
+        tasteChanges: body.tasteChanges ?? [],
+        dna: body.dna,
+        bookTwin: body.bookTwin,
         analyzedAt: Date.now(),
       });
       await reload();
@@ -113,58 +122,72 @@ export default function DiscoverPage() {
     }
   }, [reload]);
 
-  const runRecommend = useCallback(async () => {
-    const repository = getRepository();
-    const currentPreference = await repository.getPreferenceProfile();
-    const currentProfile = await repository.getAiProfile();
-    if (!currentPreference || !currentProfile) {
-      return;
-    }
-    setRecommending(true);
-    setAiError("");
-    setMissingKey(false);
-    try {
-      const response = await fetch("/api/ai/recommend", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          preference: toPreferencePayload(currentPreference),
-          behavior: await collectBehaviorSnapshot(),
-          profile: {
-            profileType: currentProfile.profileType,
-            summary: currentProfile.summary,
-            genres: currentProfile.genres,
-            traits: currentProfile.traits,
-            recommendationFactors: currentProfile.recommendationFactors,
-            evidence: currentProfile.evidence,
-          },
-          excludeTitles: await collectExcludeTitles(),
-        }),
-      });
-      const body = (await response.json()) as RecommendResponse & AiErrorResponse;
-      if (!response.ok) {
-        handleAiFailure(response.status, body);
+  const runRecommend = useCallback(
+    async (options?: { mood?: string; timeAvailable?: string }) => {
+      const repository = getRepository();
+      const currentPreference = await repository.getPreferenceProfile();
+      const currentProfile = await repository.getAiProfile();
+      if (!currentPreference || !currentProfile) {
         return;
       }
-      const generatedAt = Date.now();
-      await repository.replaceActiveRecommendations(
-        body.items.map((item) => ({
-          id: crypto.randomUUID(),
-          book: item.book,
-          matchPercent: item.matchPercent,
-          reason: item.reason,
-          generatedAt,
-          status: "active" as const,
-        })),
+      setRecommending(true);
+      setAiError("");
+      setMissingKey(false);
+      setLastContext(
+        options ? [options.mood, options.timeAvailable].filter(Boolean).join(" · ") : null,
       );
-      await reload();
-    } catch (error) {
-      console.error("[Discover] recommendation failed:", error);
-      setAiError("AI 추천에 실패했어요. 잠시 후 다시 시도해 주세요.");
-    } finally {
-      setRecommending(false);
-    }
-  }, [reload]);
+      try {
+        const response = await fetch("/api/ai/recommend", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            preference: toPreferencePayload(currentPreference),
+            behavior: await collectBehaviorSnapshot(),
+            profile: {
+              profileType: currentProfile.profileType,
+              summary: currentProfile.summary,
+              genres: currentProfile.genres,
+              traits: currentProfile.traits,
+              recommendationFactors: currentProfile.recommendationFactors,
+              evidence: currentProfile.evidence,
+              tasteChanges: currentProfile.tasteChanges ?? [],
+              // 구버전 프로필(신규 필드 부재) 호환용 중립 기본값
+              // Neutral defaults for profiles analyzed before these fields existed
+              dna: currentProfile.dna ?? { fiction: 50, depth: 50, emotion: 50, exploration: 50 },
+              bookTwin: currentProfile.bookTwin ?? { title: "", reason: "" },
+            },
+            excludeTitles: await collectExcludeTitles(),
+            ...(options?.mood ? { mood: options.mood } : {}),
+            ...(options?.timeAvailable ? { timeAvailable: options.timeAvailable } : {}),
+          }),
+        });
+        const body = (await response.json()) as RecommendResponse & AiErrorResponse;
+        if (!response.ok) {
+          handleAiFailure(response.status, body);
+          return;
+        }
+        const generatedAt = Date.now();
+        await repository.replaceActiveRecommendations(
+          body.items.map((item) => ({
+            id: crypto.randomUUID(),
+            book: item.book,
+            matchPercent: item.matchPercent,
+            reason: item.reason,
+            category: item.category,
+            generatedAt,
+            status: "active" as const,
+          })),
+        );
+        await reload();
+      } catch (error) {
+        console.error("[Discover] recommendation failed:", error);
+        setAiError("AI 추천에 실패했어요. 잠시 후 다시 시도해 주세요.");
+      } finally {
+        setRecommending(false);
+      }
+    },
+    [reload],
+  );
 
   async function handleWantToRead(recommendation: AiRecommendation) {
     const repository = getRepository();
@@ -180,6 +203,18 @@ export default function DiscoverPage() {
     } catch (error) {
       console.error("[Discover] failed to save want-to-read:", error);
       setAiError("책을 저장하지 못했어요. 다시 시도해 주세요.");
+    }
+  }
+
+  async function handleToggleLike(recommendation: AiRecommendation) {
+    try {
+      await getRepository().updateRecommendation(recommendation.id, {
+        status: recommendation.status === "liked" ? "active" : "liked",
+      });
+      await reload();
+    } catch (error) {
+      console.error("[Discover] failed to toggle like:", error);
+      setAiError("피드백을 저장하지 못했어요. 다시 시도해 주세요.");
     }
   }
 
@@ -295,18 +330,33 @@ export default function DiscoverPage() {
         <section className="mt-8 lg:mt-5" aria-label="AI 추천">
           <div className="flex items-baseline justify-between">
             <h2 className="text-xs font-semibold tracking-wide text-ink-tertiary uppercase">
-              For You
+              추천
+              {lastContext && (
+                <span className="ml-2 font-medium normal-case text-ink-secondary">
+                  {lastContext}
+                </span>
+              )}
             </h2>
-            {recommendations.length > 0 && (
+            <div className="flex items-baseline gap-3">
               <button
                 type="button"
                 disabled={recommending}
-                onClick={() => void runRecommend()}
-                className="text-sm font-medium text-tint active:opacity-70 disabled:opacity-40"
+                onClick={() => setMoodOpen(true)}
+                className="cursor-pointer text-sm font-medium text-tint active:opacity-70 disabled:opacity-40"
               >
-                {recommending ? "추천 받는 중…" : "새로 추천 받기"}
+                기분 맞춤
               </button>
-            )}
+              {recommendations.length > 0 && (
+                <button
+                  type="button"
+                  disabled={recommending}
+                  onClick={() => void runRecommend()}
+                  className="cursor-pointer text-sm font-medium text-tint active:opacity-70 disabled:opacity-40"
+                >
+                  {recommending ? "추천 받는 중…" : "새로 추천 받기"}
+                </button>
+              )}
+            </div>
           </div>
 
           {recommendations.length === 0 ? (
@@ -325,16 +375,32 @@ export default function DiscoverPage() {
               </motion.button>
             </div>
           ) : (
-            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-              {recommendations.map((recommendation) => (
-                <RecommendationCard
-                  key={recommendation.id}
-                  recommendation={recommendation}
-                  onWantToRead={() => void handleWantToRead(recommendation)}
-                  onAlreadyRead={() => void handleAlreadyRead(recommendation)}
-                  onNotInterested={() => setNotInterestedTarget(recommendation.id)}
-                />
-              ))}
+            // 카테고리별 그룹핑 — For You / Because You Loved 등 (스펙 §52)
+            // Grouped by category — For You / Because You Loved etc. (spec §52)
+            <div className="mt-3 flex flex-col gap-6">
+              {[...new Set(recommendations.map((item) => item.category ?? "For You"))].map(
+                (category) => (
+                  <div key={category}>
+                    <h3 className="mb-2 text-[13px] font-semibold text-ink-secondary">
+                      {category}
+                    </h3>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                      {recommendations
+                        .filter((item) => (item.category ?? "For You") === category)
+                        .map((recommendation) => (
+                          <RecommendationCard
+                            key={recommendation.id}
+                            recommendation={recommendation}
+                            onWantToRead={() => void handleWantToRead(recommendation)}
+                            onAlreadyRead={() => void handleAlreadyRead(recommendation)}
+                            onNotInterested={() => setNotInterestedTarget(recommendation.id)}
+                            onToggleLike={() => void handleToggleLike(recommendation)}
+                          />
+                        ))}
+                    </div>
+                  </div>
+                ),
+              )}
             </div>
           )}
         </section>
@@ -346,6 +412,15 @@ export default function DiscoverPage() {
         open={notInterestedTarget !== null}
         onClose={() => setNotInterestedTarget(null)}
         onSelect={(reason) => void handleNotInterested(reason)}
+      />
+
+      <MoodSheet
+        open={moodOpen}
+        onClose={() => setMoodOpen(false)}
+        onSubmit={(options) => {
+          setMoodOpen(false);
+          void runRecommend(options);
+        }}
       />
     </main>
   );

@@ -10,6 +10,9 @@ interface RecommendationCardProps {
   onWantToRead: () => void;
   onNotInterested: () => void;
   onAlreadyRead: () => void;
+  // 좋아요 토글 — 긍정 신호로 다음 추천에 반영 (스펙 §50)
+  // Like toggle — positive signal fed into future recommendations (spec §50)
+  onToggleLike: () => void;
 }
 
 // AI 추천 카드 — 표지 중심 + 설명 가능한 추천 (스펙 §48–49)
@@ -19,16 +22,43 @@ export default function RecommendationCard({
   onWantToRead,
   onNotInterested,
   onAlreadyRead,
+  onToggleLike,
 }: RecommendationCardProps) {
   const [showReason, setShowReason] = useState(false);
   const { book, matchPercent, status } = recommendation;
+  const liked = status === "liked";
 
   return (
     <article className="rounded-2xl bg-elevated p-4 ring-1 ring-separator">
       <div className="flex gap-4">
         <BookCover title={book.title} coverUrl={book.coverUrl} size="md" />
         <div className="min-w-0 flex-1">
-          <p className="nums text-[13px] font-semibold text-tint">{matchPercent}% Match</p>
+          <div className="flex items-center justify-between">
+            <p className="nums text-[13px] font-semibold text-tint">{matchPercent}% Match</p>
+            <button
+              type="button"
+              aria-label={liked ? "좋아요 취소" : "좋아요"}
+              aria-pressed={liked}
+              onClick={onToggleLike}
+              className={`-mr-1 flex size-8 cursor-pointer items-center justify-center rounded-full transition-colors duration-150 active:bg-fill ${
+                liked ? "text-danger" : "text-ink-tertiary hover:text-ink-secondary"
+              }`}
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill={liked ? "currentColor" : "none"}
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+              </svg>
+            </button>
+          </div>
           <h3 className="mt-1 text-[17px] leading-snug font-semibold tracking-tight break-keep">
             {book.title}
           </h3>

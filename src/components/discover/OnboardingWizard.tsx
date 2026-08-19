@@ -4,7 +4,12 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import BookSearch from "@/components/read/BookSearch";
 import BookCover from "@/components/BookCover";
-import { GENRE_OPTIONS, READING_PURPOSE_OPTIONS } from "@/lib/constants";
+import {
+  AGE_RANGE_OPTIONS,
+  GENDER_OPTIONS,
+  GENRE_OPTIONS,
+  READING_PURPOSE_OPTIONS,
+} from "@/lib/constants";
 import { getRepository } from "@/lib/repository";
 import type { BookRef, BookSearchResult, FictionPreference } from "@/lib/types";
 
@@ -17,6 +22,7 @@ const STEPS = [
   "dislikedBooks",
   "fiction",
   "purposes",
+  "ageGender",
 ] as const;
 
 type Step = (typeof STEPS)[number];
@@ -28,6 +34,7 @@ const STEP_TITLES: Record<Step, string> = {
   dislikedBooks: "기대와 달랐던 책이 있나요?",
   fiction: "어느 쪽에 더 끌리세요?",
   purposes: "책에서 무엇을 얻고 싶으세요?",
+  ageGender: "마지막이에요, 살짝만 알려주세요",
 };
 
 const FICTION_OPTIONS: { value: FictionPreference; label: string; description: string }[] = [
@@ -57,6 +64,10 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
   const [dislikedBooks, setDislikedBooks] = useState<BookRef[]>([]);
   const [fictionPreference, setFictionPreference] = useState<FictionPreference | null>(null);
   const [purposes, setPurposes] = useState<string[]>([]);
+  // 선택 응답 — 미응답 허용, 추천 가중치 최하 (스펙 §40–41)
+  // Optional answers — may stay empty, lowest recommendation weight (spec §40–41)
+  const [ageRange, setAgeRange] = useState<string | null>(null);
+  const [gender, setGender] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
@@ -103,6 +114,8 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
         dislikedBooks,
         fictionPreference,
         readingPurposes: purposes,
+        ...(ageRange ? { ageRange } : {}),
+        ...(gender && gender !== "응답하지 않음" ? { gender } : {}),
         updatedAt: Date.now(),
       });
       onComplete();
@@ -226,6 +239,44 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
                   </button>
                 );
               })}
+            </div>
+          )}
+
+          {step === "ageGender" && (
+            <div className="mt-6">
+              <p className="text-center text-sm text-ink-tertiary">
+                응답하지 않아도 괜찮아요 — 추천에는 아주 살짝만 반영돼요
+              </p>
+              <h3 className="mt-5 text-sm font-semibold text-ink-secondary">연령대</h3>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {AGE_RANGE_OPTIONS.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setAgeRange(ageRange === option ? null : option)}
+                    className={`cursor-pointer rounded-full px-3.5 py-2 text-[14px] font-medium transition-colors duration-150 ${
+                      ageRange === option ? "bg-accent text-accent-ink" : "bg-fill text-ink-secondary"
+                    }`}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+              <h3 className="mt-5 text-sm font-semibold text-ink-secondary">성별</h3>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {GENDER_OPTIONS.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setGender(gender === option ? null : option)}
+                    className={`cursor-pointer rounded-full px-3.5 py-2 text-[14px] font-medium transition-colors duration-150 ${
+                      gender === option ? "bg-accent text-accent-ink" : "bg-fill text-ink-secondary"
+                    }`}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
