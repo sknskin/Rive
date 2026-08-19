@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import AuthSync from "@/components/AuthSync";
 import TabBar from "@/components/TabBar";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 
@@ -33,6 +34,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           {children}
         </div>
         <TabBar />
+        {/* 세션-저장모드 정합 + 창 복귀 재조회 (렌더 없음) */}
+        {/* Session/storage-mode sync and visibility refetch (renderless) */}
+        <AuthSync />
       </body>
     </html>
   );
