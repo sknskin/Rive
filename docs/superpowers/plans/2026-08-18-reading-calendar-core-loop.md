@@ -1,5 +1,11 @@
 # Reading Calendar 핵심 루프 구현 계획
 
+> **⚠️ 역사적 스냅샷 (2026-08-19 4차 전수조사 판정):** 이 문서는 1차 구현 당시 계획
+> 그대로이며 이후 변경을 반영하지 않는다. 현행과 다른 대표 지점 — `getLastSessionForBook`
+> 삭제됨(현재 `UserBook.currentPage` 사용), 하단 5탭 TabBar는 내비게이션 v2(모바일 드로어 +
+> 데스크톱 상단 바)로 대체됨, `greetingForHour`는 `greetingForDate`로 변경됨,
+> `page.module.css`는 사용자 승인 후 삭제됨. **최신 상태의 단일 기준은 `docs/BACKLOG.md`.**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** READ → 스톱워치 → 종료 페이지 입력 → 저장 → Today/Calendar 반영까지의 핵심 루프와 도서 검색(Kakao 우선, Google Books 폴백)을 구현한다.

@@ -1,7 +1,7 @@
 # Rive 백로그
 
-최종 갱신: 2026-08-19 (3차 전수조사 — 설계 부합성 14항목 검증 반영)
-근거: 코드베이스 전수조사 2회(라우트/컴포넌트/데이터 모델/하이진 스캔/데드코드 스윕) + 제품 스펙 대조.
+최종 갱신: 2026-08-19 (4차 전수조사 — P2·P3 완료 주장 20건 코드 대조 재검증, 문서 모순 정리)
+근거: 코드베이스 전수조사 4회(라우트/컴포넌트/데이터 모델/하이진 스캔/데드코드 스윕) + 제품 스펙 대조.
 모든 항목은 코드에서 확인된 사실 기반이며, 항목마다 스펙 참조(§)와 근거를 병기한다.
 
 ## 현재 상태 요약
@@ -35,7 +35,8 @@
   LIBRARY_CHANGE_EVENT로 열려 있는 Library/Today가 이동 없이 즉시 갱신.
   검증 3라운드 연속 통과(Insights에서 관심 등록, Library 무이동 갱신, 모바일
   캘린더 새 책 기록 저장, 바로 읽기 시작 → Reading Mode).
-- 페이지 7개, API 라우트 4개, 컴포넌트 25개. 단위 테스트 52개 통과.
+- 페이지 7개, API 라우트 5개(books/search·books/enrich·ai/profile·ai/recommend·ai/wrapped),
+  컴포넌트 28개. 단위 테스트 60개 통과 (4차 전수조사 실측).
 - 코드 하이진: TODO/FIXME/`any`/빈 catch/ts-ignore 0건 (3차 전수조사 재확인.
   유일 예외: theme.ts의 FOUC 방지 인라인 스크립트 문자열 내부 빈 catch — 무해).
 - 설계 부합성 (2026-08-19 3차 조사): 스펙 핵심 원칙 14항목 전부 충족 판정 —
@@ -142,38 +143,23 @@
 - tasteChanges는 데이터 축적 전이라 AI가 빈 배열 반환(정상 동작) — 수개월 데이터 후 검증.
 - 컴포넌트(React) 테스트는 여전히 없음 — jsdom+testing-library 의존성 승인 필요.
 
-## P2 — 스펙 2차 기능 (§81)
+## P2·P3 원본 갭 표 정리 (4차 전수조사, 2026-08-19)
 
-| 항목 | 스펙 | 현재 사실 |
-|---|---|---|
-| Notes/Quotes 독립 관리 | §27 | `ReadingSession.memo`가 유일한 자유 텍스트. 인용구/독립 노트 엔티티 없음 |
-| Reading Goals | §36 | 미구현 |
-| ~~Heatmap~~ | §30 | **완료 (2026-08-19)** — Insights Activity 섹션, 최근 1년 53주 그리드, 강도 5단계, 모바일 가로 스크롤 |
-| 과거의 오늘 | §28 | 미구현 |
-| ~~예상 완독일~~ | §35 | **완료 (2026-08-19)** — 최근 30일 페이스 기반, Book Detail 진행률 아래 표시 (pageCount 필요 → Books API 키 제한 해제 후 실데이터 확인 가능) |
-| Up Next | §37 | `want` 상태만 존재, Up Next 구분 없음 |
-| Mood 추천 | §53 | Discover에 For You 섹션 하나뿐 |
-| 시간 기반 추천 | §54 | 동일 |
-| Taste Change | §47 | 미구현 |
-| Reading DNA | §55 | 미구현 |
+> 이전 판의 "P2 — 스펙 2차 기능"·"P2 — 기능 완성도 갭"·"P3 — 스펙 3차 기능" 표는
+> 위 완료 섹션과 정면 모순(같은 기능을 완료이자 미구현으로 동시 기술)이라 제거했다.
+> 4차 조사에서 코드 대조로 완료를 재확인한 항목: Notes/Quotes(§27), Goals(§36),
+> Heatmap(§30), 과거의 오늘(§28), 예상 완독일(§35), Up Next(§37), Mood/시간 추천(§53–54),
+> Taste Change(§47), Reading DNA(§55), 완독 추가 평가 저장(§25), Like(§50),
+> 추천 카테고리(§52), 온보딩 나이/성별(§40–41), Library Grid/List(§21), Haptic(§0-6),
+> 장르 1/n 가중치(§33), Wrapped(§58), Book Twin(§57), Reading Plan, 공유 이미지(§82),
+> Import/Export(§82).
+> 결정 기록: 영문 라벨 혼용은 의도된 디자인으로 유지 확정(2026-08-19 사용자 확정, 종결).
 
-## P2 — 기능 완성도 갭
+원본 표에서 실제로 남은 미구현 항목만 이월:
 
-| 항목 | 스펙 | 현재 사실 |
-|---|---|---|
-| 완독 시 추가 평가(재미/몰입도/난이도 등) | §25 | 별점(1–5)만 존재 (`RatingStars`) |
-| 추천 피드백 `Like` | §50 | 버튼 3개뿐(읽고 싶어요/이미 읽었어요/관심 없어요), `RecommendationStatus`에 like 없음 |
-| 추천 카테고리 확장(Because You Loved 등) | §52 | For You만 |
-| 온보딩 나이/성별(선택 항목) | §40–41 | 6단계에 미포함 |
-| Library Grid/List 전환, 장르·저자·평점 필터 | §21 | 상태 칩 필터 + 3열 그리드 고정 |
-| ~~Haptic Feedback~~ | §0-6 | **완료 (2026-08-19)** — READ 시작/STOP(탭 진동)·세션 저장(성공 패턴), 지원 기기 한정(navigator.vibrate) |
-| ~~영문 라벨 혼용~~ | — | **결정: 유지 (2026-08-19 사용자 확정)** — 내비·섹션 헤더·단위의 영문 표기는 의도된 디자인으로 확정, 종결 |
-| 장르 시간 가중치 중복 | §33 | 한 책의 여러 subject가 각각 독서 시간 전체를 가져가 합계가 부풀려짐 — 분배(1/n) 또는 대표 장르 1개 정책 검토 |
-
-## P3 — 스펙 3차 기능 (§82)
-
-- Monthly/Annual Wrapped (§58), AI Book Twin (§57), Reading Plan, 공유 이미지, Import/Export,
-  Advanced Insights — 전부 미착수.
+- **Library 장르·저자·평점 필터** (§21) — Grid/List 전환만 구현됨. 상태 칩 필터 외
+  추가 필터 축 없음.
+- **Advanced Insights** (§82) — 미착수.
 
 ---
 
@@ -194,10 +180,47 @@
    재작성에서 `enabled` 메커니즘 자체를 제거.
 8. ~~저장소 데드 메서드~~ — **해결됨 (2026-08-19)**: 호출자 0건 재확인 후
    `getLastSessionForBook` 선언·구현 제거.
-9. **쓰기 전용 필드(미완성 배선)** — 일부 해소 (2026-08-19): `AiProfile.analyzedAt`
-   → ProfileCard에 "N월 N일 HH:MM 분석" 표시, `Book.kakaoUrl` → Book Detail "책 정보 ↗"
-   외부 링크, `KakaoBookDocument.contents` → 등록 시 description 저장(이전 작업).
-   잔여: `AiRecommendation.feedbackReason`(피드백 분석 미사용), `Book.googleBooksId`,
-   `PreferenceProfile.updatedAt`, `BookSearchResponse.source`, `RangeSummary.sessionCount`.
+9. **쓰기 전용 필드(미완성 배선)** — 대부분 해소 (2026-08-19): `AiProfile.analyzedAt`
+   → ProfileCard 분석 시각, `Book.kakaoUrl`/`Book.googleBooksId` → Book Detail "책 정보 ↗"
+   링크(카카오 우선), `KakaoBookDocument.contents` → description 저장,
+   `AiRecommendation.feedbackReason` → behavior 신호, `BookSearchResponse.source` →
+   검색 출처 캡션, `RangeSummary.sessionCount` → 기간 타일 "기록 n회".
+   잔여(4차 조사 실측): `PreferenceProfile.updatedAt`(설문 다시 하기와 함께),
+   `UserBook.extraRatings`(아래 4차 발견 참조), `ReadingGoals.year`(아래 4차 발견 참조),
+   `WrappedSummary.generatedAt`, `AiRecommendation.generatedAt`(정렬은 matchPercent만 사용),
+   `ReadingSession.createdAt`(프로덕션 읽기 없음).
 10. **Book Detail 백필 논블로킹화 완료 (2026-08-19)** — 메타 백필이 첫 페인트를 막던
    문제 수정(실측 129ms), 보강 성공 시에만 재렌더.
+
+---
+
+## 4차 전수조사 신규 발견 (2026-08-19)
+
+코드 실측 결과: 테스트 60개·tsc·lint·빌드 전부 통과, 하이진 위반 0건,
+P0 5건 및 P2·P3 완료 주장 20건 중 19건 코드와 정확히 일치. 아래는 신규 발견분.
+
+### A. `ReadingGoals.year` 연도 롤오버 결함 — 유일한 기능적 결함
+- 사실: `insights/page.tsx`가 저장 시 `year`를 기록하지만 어디서도 읽지 않음.
+  헤더는 현재 연도, 목표치는 저장 당시 연도 값(고정 키 `"current"`), 진행률은 올해 누적.
+- 결과: 해가 바뀌면 "Goals 2027" 아래 2026년 목표치와 2027년(거의 0) 진행률이 병기되고,
+  GoalsForm도 작년 숫자를 프리필. 연도 비교/자동 리셋 로직 없음.
+- 제안: 로드 시 `goals.year !== 현재 연도`면 목표 재설정 유도(또는 연도별 키로 저장).
+
+### B. `UserBook.extraRatings` 쓰기 전용 — 소비처 부재
+- 사실: 완독 2단계 평가(read/page.tsx)에서 저장하지만 읽는 코드가 전무.
+  Book Detail은 rating·dnfReason만 렌더, AI 입력(BehaviorBookEntry)에도 미포함.
+- 제안: Book Detail 표시 또는 BehaviorBookEntry 확장(§25는 취향 분석 입력으로 규정) 중 택일.
+
+### C. 저위험 정합성 2건
+- `dataTransfer.ts` 주석은 "전 테이블"이라 하나 실제로는 `activeSession` 제외 10개 테이블만
+  백업(일회성 상태라 의도로 보이나 주석과 불일치 — 주석 수정 필요).
+- `removeBookCompletely`가 `activeSession`을 정리하지 않음 — 진행 중 세션의 책을 제거하면
+  고아 레코드 가능. 단 활성 세션 중 Book Detail 도달이 사실상 불가하고 read 페이지가
+  `setBook(null)`로 방어해 하드 락 없음. 트랜잭션에 activeSession 정리 1줄 추가 여지.
+
+### D. 플랜/스펙 문서 낡음 (기록용)
+- `docs/superpowers/plans/2026-08-18-reading-calendar-core-loop.md`: 삭제된
+  `getLastSessionForBook`, 폐기된 하단 5탭 TabBar, `greetingForHour` 등 초기 설계 그대로 —
+  역사적 스냅샷 문서로 간주(문서 상단에 주의 문구 추가함). 최신 상태는 본 BACKLOG가 기준.
+- 스펙 변경 이력의 콘텐츠 폭 서술(768px)은 lg 1024px 확대 이전 세대 — 스펙 12행의
+  "BACKLOG가 단일 기준" 위임에 따라 본 문서를 우선한다.
