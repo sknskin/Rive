@@ -132,6 +132,14 @@ const GREETING_SLOTS: GreetingSlot[] = [
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+const WEEKDAY_FULL_LABELS = ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"];
+
+// Today 헤더용 날짜 캡션 — "8월 19일 수요일"
+// Date caption for the Today header — e.g. "8월 19일 수요일"
+export function formatTodayHeadingDate(date: Date): string {
+  return `${date.getMonth() + 1}월 ${date.getDate()}일 ${WEEKDAY_FULL_LABELS[date.getDay()]}`;
+}
+
 export function greetingForDate(date: Date): string {
   const hour = date.getHours();
   const slot =

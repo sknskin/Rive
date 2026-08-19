@@ -6,8 +6,21 @@ import {
   formatPageRange,
   formatStopwatch,
   formatTimeOfDay,
+  formatTodayHeadingDate,
   greetingForDate,
 } from "./format";
+
+describe("formatTodayHeadingDate", () => {
+  it("월/일/요일을 한국어로 표기한다", () => {
+    // 2026-08-19는 수요일
+    expect(formatTodayHeadingDate(new Date(2026, 7, 19))).toBe("8월 19일 수요일");
+  });
+
+  it("연말 일요일도 올바르게 표기한다", () => {
+    // 2026-12-27은 일요일
+    expect(formatTodayHeadingDate(new Date(2026, 11, 27))).toBe("12월 27일 일요일");
+  });
+});
 
 describe("formatStopwatch", () => {
   it("0초를 00:00:00으로 표시한다", () => {
