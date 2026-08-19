@@ -518,3 +518,16 @@ Up Next, 예상 완독일, 무드 추천, 계정 동기화. **AI 취향 분석+�
 **이 시점의 잔여 = Vercel 배포(사용자 로그인 필요) + 배포 결합 3건(리마인더·쿼터 환불·
 WAF) + 외부 콘솔(Kakao OAuth) + 대형(북클럽·Advanced Insights·공유 카탈로그) +
 바코드 실기기 확인.**
+
+---
+
+## 배포 완료 (2026-08-19)
+
+- **https://rive-ochre.vercel.app** — Vercel Hobby(무료), GitHub sknskin/Rive 연동
+  (푸시하면 자동 재배포). 임시 스크린샷 41개 + .playwright-mcp 정리.
+- 원격 검증: 홈·manifest·아이콘 200, /api/books/search 정상(환경변수 동작),
+  /api/ai/* 무인증 401 차단.
+- 배포 후 잔여 설정: Supabase URL Configuration에 배포 도메인 추가(Site URL +
+  Redirect URLs — Google 로그인/메일 링크용, 사용자 진행).
+- 배포로 풀린 후속 과제: 독서 리마인더(웹 푸시), D8 쿼터 환불(service key 등록 시),
+  WAF rate limit(남용 관측 시).
