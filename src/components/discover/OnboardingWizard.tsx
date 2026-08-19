@@ -135,8 +135,9 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
             <button
               key={genre}
               type="button"
+              aria-pressed={selected}
               onClick={() => toggleItem(list, setList, genre)}
-              className={`rounded-full px-4 py-2 text-[14px] font-medium transition-colors duration-150 ${
+              className={`cursor-pointer rounded-full px-4 py-2 text-[14px] font-medium transition-colors duration-150 ${
                 selected ? "bg-accent text-accent-ink" : "bg-fill text-ink-secondary"
               }`}
             >
@@ -178,7 +179,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
           type="button"
           aria-label="이전"
           onClick={() => setStepIndex((index) => Math.max(0, index - 1))}
-          className={`-ml-2 flex size-9 items-center justify-center rounded-full text-xl text-tint active:bg-fill ${
+          className={`-ml-2 flex size-9 cursor-pointer items-center justify-center rounded-full text-xl text-tint active:bg-fill ${
             stepIndex === 0 ? "invisible" : ""
           }`}
         >
@@ -223,8 +224,9 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
                   <button
                     key={option.value}
                     type="button"
+                    aria-pressed={selected}
                     onClick={() => setFictionPreference(option.value)}
-                    className={`rounded-2xl px-5 py-4 text-left transition-colors duration-150 ${
+                    className={`cursor-pointer rounded-2xl px-5 py-4 text-left transition-colors duration-150 ${
                       selected ? "bg-accent text-accent-ink" : "bg-fill"
                     }`}
                   >
@@ -253,6 +255,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
                   <button
                     key={option}
                     type="button"
+                    aria-pressed={ageRange === option}
                     onClick={() => setAgeRange(ageRange === option ? null : option)}
                     className={`cursor-pointer rounded-full px-3.5 py-2 text-[14px] font-medium transition-colors duration-150 ${
                       ageRange === option ? "bg-accent text-accent-ink" : "bg-fill text-ink-secondary"
@@ -268,6 +271,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
                   <button
                     key={option}
                     type="button"
+                    aria-pressed={gender === option}
                     onClick={() => setGender(gender === option ? null : option)}
                     className={`cursor-pointer rounded-full px-3.5 py-2 text-[14px] font-medium transition-colors duration-150 ${
                       gender === option ? "bg-accent text-accent-ink" : "bg-fill text-ink-secondary"
@@ -288,8 +292,9 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
                   <button
                     key={purpose}
                     type="button"
+                    aria-pressed={selected}
                     onClick={() => toggleItem(purposes, setPurposes, purpose)}
-                    className={`rounded-full px-4 py-2 text-[14px] font-medium transition-colors duration-150 ${
+                    className={`cursor-pointer rounded-full px-4 py-2 text-[14px] font-medium transition-colors duration-150 ${
                       selected ? "bg-accent text-accent-ink" : "bg-fill text-ink-secondary"
                     }`}
                   >
@@ -315,7 +320,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
             setStepIndex((index) => index + 1);
           }
         }}
-        className="mt-6 w-full rounded-2xl bg-accent py-4 text-lg font-semibold text-accent-ink disabled:opacity-40"
+        className="mt-6 w-full cursor-pointer rounded-2xl bg-accent py-4 text-lg font-semibold tracking-wide text-accent-ink shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
       >
         {isLast ? (saving ? "저장하는 중…" : "완료") : "다음"}
       </motion.button>
@@ -326,7 +331,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
         <button
           type="button"
           onClick={() => setStepIndex((index) => index + 1)}
-          className="mt-3 text-sm font-medium text-ink-tertiary active:opacity-70"
+          className="mt-3 cursor-pointer text-sm font-medium text-ink-tertiary active:opacity-70"
         >
           건너뛰기
         </button>

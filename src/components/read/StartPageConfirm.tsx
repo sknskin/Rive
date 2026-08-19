@@ -74,7 +74,7 @@ export default function StartPageConfirm({
         whileTap={{ scale: 0.97 }}
         disabled={starting || (editing && !validPage)}
         onClick={() => onStart(editing && validPage ? parsed : suggestedPage)}
-        className="mt-8 w-full rounded-2xl bg-accent py-4 text-lg font-semibold text-accent-ink disabled:opacity-40"
+        className="mt-8 w-full cursor-pointer rounded-2xl bg-accent py-4 text-lg font-semibold tracking-wide text-accent-ink shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
       >
         {starting ? "시작하는 중…" : "읽기 시작"}
       </motion.button>

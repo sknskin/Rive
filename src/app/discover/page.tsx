@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { motion } from "motion/react";
+import PageSkeleton from "@/components/PageSkeleton";
 import MoodSheet from "@/components/discover/MoodSheet";
 import NotInterestedSheet from "@/components/discover/NotInterestedSheet";
 import OnboardingWizard from "@/components/discover/OnboardingWizard";
@@ -46,9 +47,13 @@ export default function DiscoverPage() {
   const reload = useCallback(async () => {
     const repository = getRepository();
     try {
-      const loadedPreference = await repository.getPreferenceProfile();
-      const loadedProfile = await repository.getAiProfile();
-      const loadedRecommendations = await repository.listRecommendations();
+      // 서로 독립적인 조회는 병렬로 실행한다 (6차 조사 D4)
+      // Run independent reads in parallel (audit 6 D4)
+      const [loadedPreference, loadedProfile, loadedRecommendations] = await Promise.all([
+        repository.getPreferenceProfile(),
+        repository.getAiProfile(),
+        repository.listRecommendations(),
+      ]);
       setProfile(loadedProfile ?? null);
       // 거절/이미 읽음 피드백을 남긴 추천은 목록에서 감춘다
       // Hide recommendations dismissed via feedback
@@ -246,12 +251,14 @@ export default function DiscoverPage() {
   }
 
   if (phase === "loading") {
-    return <main className="flex-1" />;
+    return <PageSkeleton />;
   }
 
   if (phase === "wizard") {
     return (
-      <main className="flex min-h-dvh flex-col">
+      // 상위 레이아웃이 이미 min-h-dvh라 flex-1로 채운다 — 이중 100dvh 스크롤 방지
+      // The layout already sets min-h-dvh; flex-1 avoids a doubled-height scroll
+      <main className="flex flex-1 flex-col">
         <OnboardingWizard
           onComplete={() => {
             void reload().then(() => runAnalyze());
@@ -276,7 +283,7 @@ export default function DiscoverPage() {
           type="button"
           whileTap={{ scale: 0.97 }}
           onClick={() => setPhase("wizard")}
-          className="mt-8 w-full rounded-2xl bg-accent py-4 text-lg font-semibold text-accent-ink"
+          className="mt-8 w-full max-w-xs cursor-pointer rounded-2xl bg-accent py-4 text-lg font-semibold tracking-wide text-accent-ink shadow-sm transition-opacity hover:opacity-90"
         >
           시작하기
         </motion.button>
@@ -317,7 +324,7 @@ export default function DiscoverPage() {
               whileTap={{ scale: 0.97 }}
               disabled={analyzing}
               onClick={() => void runAnalyze()}
-              className="mt-4 w-full rounded-2xl bg-accent py-3.5 text-[15px] font-semibold text-accent-ink disabled:opacity-40"
+              className="mt-4 w-full cursor-pointer rounded-2xl bg-accent py-4 text-lg font-semibold tracking-wide text-accent-ink shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
             >
               {analyzing ? "분석 중…" : "AI 취향 분석하기"}
             </motion.button>
@@ -369,7 +376,7 @@ export default function DiscoverPage() {
                 whileTap={{ scale: 0.97 }}
                 disabled={recommending}
                 onClick={() => void runRecommend()}
-                className="mt-4 w-full rounded-2xl bg-accent py-3.5 text-[15px] font-semibold text-accent-ink disabled:opacity-40"
+                className="mt-4 w-full cursor-pointer rounded-2xl bg-accent py-4 text-lg font-semibold tracking-wide text-accent-ink shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
               >
                 {recommending ? "추천 받는 중…" : "추천 받기"}
               </motion.button>
