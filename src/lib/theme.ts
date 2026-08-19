@@ -3,7 +3,7 @@
 
 export type ThemeMode = "light" | "dark" | "system";
 
-export const THEME_STORAGE_KEY = "rive-theme";
+const THEME_STORAGE_KEY = "rive-theme";
 export const DEFAULT_THEME: ThemeMode = "system";
 
 export const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
@@ -29,7 +29,7 @@ export function getStoredTheme(): ThemeMode {
 
 // 모드 변경을 구독자(아이콘 버튼 등)에게 알리는 커스텀 이벤트
 // Custom event that notifies subscribers (icon button, etc.) of mode changes
-export const THEME_CHANGE_EVENT = "rive-theme-change";
+const THEME_CHANGE_EVENT = "rive-theme-change";
 
 export function applyTheme(mode: ThemeMode): void {
   try {

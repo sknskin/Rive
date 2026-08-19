@@ -16,7 +16,7 @@ import { DB_NAME } from "@/lib/constants";
 
 // Dexie(IndexedDB) 스키마 정의 — 로컬 우선 저장소
 // Dexie (IndexedDB) schema definition — local-first storage
-export class RiveDatabase extends Dexie {
+class RiveDatabase extends Dexie {
   books!: EntityTable<Book, "id">;
   userBooks!: EntityTable<UserBook, "bookId">;
   readingSessions!: EntityTable<ReadingSession, "id">;

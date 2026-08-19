@@ -157,7 +157,7 @@ export interface ReadingDna {
   exploration: number;
 }
 
-export interface AiGenreScore {
+interface AiGenreScore {
   name: string;
   score: number;
 }

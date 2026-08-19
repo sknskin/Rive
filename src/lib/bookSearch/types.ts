@@ -15,12 +15,12 @@ export interface KakaoBookResponse {
   documents: KakaoBookDocument[];
 }
 
-export interface GoogleVolumeIdentifier {
+interface GoogleVolumeIdentifier {
   type: string;
   identifier: string;
 }
 
-export interface GoogleVolumeInfo {
+interface GoogleVolumeInfo {
   title?: string;
   authors?: string[];
   publisher?: string;
