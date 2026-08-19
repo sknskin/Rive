@@ -552,7 +552,7 @@ WAF) + 외부 콘솔(Kakao OAuth) + 대형(북클럽·Advanced Insights·공유 
 - **접근성·비동기**: drawer 포커스 트랩·Escape·복귀·스크롤 잠금, 입력 이름,
   live region/alert, reduced-motion CSS·MotionConfig, 검색 stale/abort, BroadcastChannel cleanup,
   Calendar batch lookup 검증.
-- **자동 게이트**: coverage-v8, GitHub Actions CI, Chromium 데스크톱·모바일 E2E.
+- **자동 검증 기반**: coverage-v8, Chromium 데스크톱·모바일 E2E.
   최종 실측은 Vitest 22파일/132건, coverage 28.55/25.45/23.08/28.86%, Playwright 4건 통과.
 
 ### 외부 권한·제품 결정이 필요한 잔여
@@ -561,6 +561,9 @@ WAF) + 외부 콘솔(Kakao OAuth) + 대형(북클럽·Advanced Insights·공유 
   schema cache에 없음(`PGRST202` 실측). DB/dashboard 인증이 없어 현재 세션에서 적용
   불가. 적용 전 계정 모드는 재시도 수렴형 호환 경로를 사용하므로 **서버 원자성은
   아직 완료로 간주하지 않는다**.
+- **GitHub Actions 등록**: CI workflow 초안은 `.github/ci.yml`에 보존했지만 현재
+  `sknskin` OAuth token에 `workflow` scope가 없어 `.github/workflows/ci.yml` 등록이
+  거부됨. scope 승인 후 파일을 해당 경로로 옮겨 활성화해야 함.
 - **비밀/인프라**: AI 실패 시 쿼터 환불(service-role 보호 설계), Vercel WAF/rate limit,
   Kakao OAuth, 실기기 바코드·카메라 검증.
 - **제품 정책/대형 기능**: 재독 주기, 리마인더, 계정 삭제·비밀번호 재설정·개인정보

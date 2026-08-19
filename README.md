@@ -48,7 +48,7 @@ npm run test:e2e
 npm run verify
 ```
 
-`npm run verify`는 coverage 임계치, ESLint, TypeScript, Next.js production build를 순차 검증합니다. Playwright는 Chromium 데스크톱·모바일에서 실제 독서 저장 루프와 보안 헤더를 검증합니다. PR·`main` push에서 동일한 GitHub Actions CI가 실행됩니다.
+`npm run verify`는 coverage 임계치, ESLint, TypeScript, Next.js production build를 순차 검증합니다. Playwright는 Chromium 데스크톱·모바일에서 실제 독서 저장 루프와 보안 헤더를 검증합니다.
 
 ## 데이터베이스와 배포
 

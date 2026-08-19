@@ -45,7 +45,8 @@
 6. Google 로그인을 쓰려면 Google Cloud Console의 OAuth 클라이언트
    **승인된 리디렉션 URI**에 `https://brsjafeidrsouqbwiyef.supabase.co/auth/v1/callback`이
    등록돼 있어야 함 (로컬/배포 공통 — Supabase가 중간 콜백을 받음)
-7. GitHub Actions `CI` 성공과 Vercel deployment `success`를 확인
+7. GitHub Actions workflow가 등록된 환경에서는 `CI` 성공을, 항상 Vercel deployment
+   `success`를 확인
 8. 배포 후 확인 체크리스트:
    - [ ] 비로그인: 책 검색·READ·기록(로컬 모드) 동작
    - [ ] 회원가입/로그인 → 서버 모드 전환, 이관 프롬프트
