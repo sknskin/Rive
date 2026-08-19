@@ -56,6 +56,18 @@ export class DexieRepository implements ReadingRepository {
     return created;
   }
 
+  async listBooksByIds(bookIds: string[]): Promise<Map<string, Book>> {
+    const uniqueIds = [...new Set(bookIds)];
+    const rows = await this.db.books.bulkGet(uniqueIds);
+    const byId = new Map<string, Book>();
+    rows.forEach((row) => {
+      if (row) {
+        byId.set(row.id, row);
+      }
+    });
+    return byId;
+  }
+
   async getBook(bookId: string): Promise<Book | undefined> {
     return this.db.books.get(bookId);
   }
@@ -154,15 +166,26 @@ export class DexieRepository implements ReadingRepository {
   }
 
   async removeBookCompletely(bookId: string): Promise<void> {
-    // 책 제거 시 연관 세션·노트·인용구·서재 상태를 함께 지워 고아 레코드를 남기지 않는다
-    // Removing a book also deletes its sessions/notes/quotes/shelf entry — no orphans
+    // 책 제거 시 연관 세션·노트·인용구·서재 상태·진행 중 세션을 함께 지워 고아 레코드를 남기지 않는다
+    // Removing a book also deletes its sessions/notes/quotes/shelf entry/active session — no orphans
     await this.db.transaction(
       "rw",
-      [this.db.books, this.db.userBooks, this.db.readingSessions, this.db.notes, this.db.quotes],
+      [
+        this.db.books,
+        this.db.userBooks,
+        this.db.readingSessions,
+        this.db.notes,
+        this.db.quotes,
+        this.db.activeSession,
+      ],
       async () => {
         await this.db.readingSessions.where("bookId").equals(bookId).delete();
         await this.db.notes.where("bookId").equals(bookId).delete();
         await this.db.quotes.where("bookId").equals(bookId).delete();
+        const active = await this.db.activeSession.get(ACTIVE_SESSION_ID);
+        if (active && active.bookId === bookId) {
+          await this.db.activeSession.delete(ACTIVE_SESSION_ID);
+        }
         await this.db.userBooks.delete(bookId);
         await this.db.books.delete(bookId);
       },

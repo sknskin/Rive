@@ -19,6 +19,9 @@ import type {
 export interface ReadingRepository {
   upsertBookByIsbn(book: Omit<Book, "id" | "createdAt">): Promise<Book>;
   getBook(bookId: string): Promise<Book | undefined>;
+  // N+1 방지용 배치 조회 — 네트워크 저장소 전환 시 왕복을 1회로 줄인다 (6차 조사 D3)
+  // Batch lookup to avoid N+1 — one round trip once the store goes remote (audit 6 D3)
+  listBooksByIds(bookIds: string[]): Promise<Map<string, Book>>;
   updateBookMeta(
     bookId: string,
     patch: Partial<Pick<Book, "pageCount" | "description" | "categories" | "enrichedAt">>,
