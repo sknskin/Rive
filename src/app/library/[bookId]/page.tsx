@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import BookCover from "@/components/BookCover";
 import BottomSheet from "@/components/BottomSheet";
+import NotesQuotes from "@/components/library/NotesQuotes";
 import RatingStars from "@/components/library/RatingStars";
 import StatusSheet from "@/components/library/StatusSheet";
 import ManualSessionSheet from "@/components/read/ManualSessionSheet";
@@ -13,6 +14,7 @@ import { DEFAULT_START_PAGE, STATUS_LABELS } from "@/lib/constants";
 import { enrichBookMeta } from "@/lib/enrichBook";
 import { notifyLibraryChange } from "@/lib/libraryEvents";
 import {
+  formatDateInput,
   formatDurationShort,
   formatPageRange,
   formatShortDate,
@@ -39,6 +41,7 @@ export default function BookDetailPage() {
   const [manualSheetOpen, setManualSheetOpen] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
   const [daysToFinish, setDaysToFinish] = useState<number | null>(null);
+  const [loadedAtMs, setLoadedAtMs] = useState(0);
   // 세션 액션(수정/삭제)과 책 제거 확인 상태 (BACKLOG P0-B)
   // Session action (edit/delete) and book-removal confirmation state (BACKLOG P0-B)
   const [sessionAction, setSessionAction] = useState<ReadingSession | null>(null);
@@ -46,6 +49,10 @@ export default function BookDetailPage() {
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [removeSheetOpen, setRemoveSheetOpen] = useState(false);
   const [removeArmed, setRemoveArmed] = useState(false);
+  // Reading Plan — 완독 목표일 설정 (스펙 §82)
+  // Reading plan — target finish date (spec §82)
+  const [planSheetOpen, setPlanSheetOpen] = useState(false);
+  const [planDateText, setPlanDateText] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -85,6 +92,7 @@ export default function BookDetailPage() {
                 )
               : null,
           );
+          setLoadedAtMs(Date.now());
           setPageError("");
           setReady(true);
         }
@@ -133,6 +141,40 @@ export default function BookDetailPage() {
     } catch (error) {
       console.error("[BookDetail] failed to save rating:", error);
       setPageError("별점을 저장하지 못했어요. 다시 시도해 주세요.");
+    }
+  }
+
+  async function handleToggleUpNext() {
+    if (!book || !userBook) {
+      return;
+    }
+    try {
+      await getRepository().updateUserBook(book.id, {
+        upNextAt: userBook.upNextAt === undefined ? Date.now() : undefined,
+      });
+      notifyLibraryChange();
+      setReloadKey((key) => key + 1);
+    } catch (error) {
+      console.error("[BookDetail] failed to toggle up-next:", error);
+      setPageError("Up Next 설정에 실패했어요. 다시 시도해 주세요.");
+    }
+  }
+
+  async function handleSaveTargetDate(clear: boolean) {
+    if (!book) {
+      return;
+    }
+    try {
+      const targetDate = clear ? undefined : new Date(`${planDateText}T23:59`).getTime();
+      if (!clear && !Number.isFinite(targetDate)) {
+        return;
+      }
+      await getRepository().updateUserBook(book.id, { targetDate });
+      setPlanSheetOpen(false);
+      setReloadKey((key) => key + 1);
+    } catch (error) {
+      console.error("[BookDetail] failed to save target date:", error);
+      setPageError("목표일을 저장하지 못했어요. 다시 시도해 주세요.");
     }
   }
 
@@ -217,11 +259,15 @@ export default function BookDetailPage() {
         <p className="mt-0.5 text-sm text-ink-tertiary">
           {book.publisher}
           {book.pageCount > 0 && ` · ${book.pageCount}쪽`}
-          {book.kakaoUrl !== "" && (
+          {(book.kakaoUrl !== "" || book.googleBooksId !== "") && (
             <>
               {" · "}
               <a
-                href={book.kakaoUrl}
+                href={
+                  book.kakaoUrl !== ""
+                    ? book.kakaoUrl
+                    : `https://books.google.com/books?id=${book.googleBooksId}`
+                }
                 target="_blank"
                 rel="noreferrer"
                 className="cursor-pointer text-tint hover:underline active:opacity-70"
@@ -257,6 +303,20 @@ export default function BookDetailPage() {
           </button>
         )}
 
+        {userBook?.status === "want" && (
+          <button
+            type="button"
+            onClick={() => void handleToggleUpNext()}
+            className={`mt-3 cursor-pointer rounded-full px-4 py-1.5 text-[13px] font-semibold transition-colors duration-150 active:opacity-70 ${
+              userBook.upNextAt !== undefined
+                ? "bg-accent text-accent-ink"
+                : "bg-fill text-tint"
+            }`}
+          >
+            {userBook.upNextAt !== undefined ? "Up Next ✓" : "Up Next에 추가"}
+          </button>
+        )}
+
         {userBook?.status === "read" && (
           <div className="mt-3">
             <RatingStars
@@ -281,6 +341,21 @@ export default function BookDetailPage() {
               <p className="nums mt-2 text-sm text-ink-tertiary">
                 현재 속도라면 약 {daysToFinish}일 후 완독 예상
               </p>
+            )}
+            {userBook.status === "reading" && book.pageCount > 0 && (
+              <PlanLine
+                targetDate={userBook.targetDate}
+                remainingPages={book.pageCount - userBook.currentPage}
+                nowMs={loadedAtMs}
+                onOpen={() => {
+                  setPlanDateText(
+                    userBook.targetDate
+                      ? formatDateInput(new Date(userBook.targetDate))
+                      : "",
+                  );
+                  setPlanSheetOpen(true);
+                }}
+              />
             )}
           </div>
         )}
@@ -332,6 +407,8 @@ export default function BookDetailPage() {
           </button>
         </section>
       )}
+
+      <NotesQuotes bookId={book.id} />
 
       <section className="mt-8" aria-label="독서 타임라인">
         <div className="flex items-baseline justify-between">
@@ -506,6 +583,38 @@ export default function BookDetailPage() {
         )}
       </BottomSheet>
 
+      <BottomSheet open={planSheetOpen} onClose={() => setPlanSheetOpen(false)}>
+        <div className="px-2 pt-2">
+          <h2 className="px-1 text-lg font-semibold tracking-tight">언제까지 완독할까요?</h2>
+          <input
+            type="date"
+            value={planDateText}
+            min={formatDateInput(new Date(loadedAtMs || 0))}
+            onChange={(event) => setPlanDateText(event.target.value)}
+            className="nums mt-4 w-full rounded-xl bg-fill px-3.5 py-3 text-[15px] outline-none focus:ring-2 focus:ring-tint"
+          />
+          <div className="mt-5 flex flex-col gap-2.5">
+            <button
+              type="button"
+              disabled={planDateText === ""}
+              onClick={() => void handleSaveTargetDate(false)}
+              className="w-full cursor-pointer rounded-2xl bg-accent py-3.5 text-[15px] font-semibold text-accent-ink disabled:opacity-40"
+            >
+              목표 저장
+            </button>
+            {userBook?.targetDate !== undefined && (
+              <button
+                type="button"
+                onClick={() => void handleSaveTargetDate(true)}
+                className="w-full cursor-pointer py-2 text-sm font-medium text-ink-tertiary"
+              >
+                목표 해제
+              </button>
+            )}
+          </div>
+        </div>
+      </BottomSheet>
+
       <BottomSheet open={removeSheetOpen} onClose={() => setRemoveSheetOpen(false)}>
         <div className="px-2 pt-2 text-center">
           <h2 className="text-lg font-semibold tracking-tight">
@@ -543,5 +652,48 @@ export default function BookDetailPage() {
         </div>
       </BottomSheet>
     </main>
+  );
+}
+
+const MS_PER_DAY = 24 * 3600 * 1000;
+
+// 완독 목표 라인 — 목표일이 있으면 D-day와 하루 필요 페이지를 보여준다 (Reading Plan)
+// Target-date line — shows D-day and daily pages needed when a goal exists
+function PlanLine({
+  targetDate,
+  remainingPages,
+  nowMs,
+  onOpen,
+}: {
+  targetDate: number | undefined;
+  remainingPages: number;
+  nowMs: number;
+  onOpen: () => void;
+}) {
+  if (targetDate === undefined) {
+    return (
+      <button
+        type="button"
+        onClick={onOpen}
+        className="mt-1.5 cursor-pointer text-sm font-medium text-tint active:opacity-70"
+      >
+        완독 목표일 정하기
+      </button>
+    );
+  }
+
+  const daysLeft = Math.max(1, Math.ceil((targetDate - nowMs) / MS_PER_DAY));
+  const pagesPerDay = Math.max(1, Math.ceil(remainingPages / daysLeft));
+  const target = new Date(targetDate);
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="nums mt-1.5 cursor-pointer text-sm text-ink-secondary active:opacity-70"
+    >
+      목표 {target.getMonth() + 1}월 {target.getDate()}일 · D-{daysLeft} · 하루 {pagesPerDay}쪽
+      <span className="ml-1 text-tint">수정</span>
+    </button>
   );
 }
