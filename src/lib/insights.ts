@@ -157,6 +157,22 @@ export function dailyTotals(sessions: ReadingSession[]): Map<string, number> {
   return totals;
 }
 
+// 연속 독서 일수 — 오늘 기록이 없으면 어제까지의 연속을 센다 (아직 안 읽은 오늘이 끊지 않게)
+// Current reading streak in days — counts through yesterday when today has no record yet
+export function currentStreakDays(totals: Map<string, number>, nowMs: number): number {
+  const cursor = new Date(nowMs);
+  cursor.setHours(0, 0, 0, 0);
+  if (!totals.has(dayKey(cursor.getTime()))) {
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  let streak = 0;
+  while (totals.has(dayKey(cursor.getTime()))) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+
 // 독서량(초) → 히트맵 강도 0–4
 // Reading seconds → heatmap intensity 0–4
 export function heatLevel(totalSeconds: number): number {

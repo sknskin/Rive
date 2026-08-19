@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  currentStreakDays,
   countFinishedBooks,
   dailyTotals,
   dayKey,
@@ -147,6 +148,35 @@ describe("weekdayHistogram", () => {
     const histogram = weekdayHistogram(sessions);
     expect(histogram[2]).toBe(300);
     expect(histogram[0]).toBe(200);
+  });
+});
+
+describe("currentStreakDays", () => {
+  const day = (year: number, month: number, date: number) =>
+    new Date(year, month, date, 12).getTime();
+
+  it("오늘 포함 연속 일수를 센다", () => {
+    const totals = dailyTotals([
+      { startedAt: day(2026, 7, 17), durationSeconds: 60 },
+      { startedAt: day(2026, 7, 18), durationSeconds: 60 },
+      { startedAt: day(2026, 7, 19), durationSeconds: 60 },
+    ] as never);
+    expect(currentStreakDays(totals, day(2026, 7, 19))).toBe(3);
+  });
+
+  it("오늘 기록이 없으면 어제까지의 연속을 센다", () => {
+    const totals = dailyTotals([
+      { startedAt: day(2026, 7, 17), durationSeconds: 60 },
+      { startedAt: day(2026, 7, 18), durationSeconds: 60 },
+    ] as never);
+    expect(currentStreakDays(totals, day(2026, 7, 19))).toBe(2);
+  });
+
+  it("이틀 전에 끊겼으면 0이다", () => {
+    const totals = dailyTotals([
+      { startedAt: day(2026, 7, 16), durationSeconds: 60 },
+    ] as never);
+    expect(currentStreakDays(totals, day(2026, 7, 19))).toBe(0);
   });
 });
 

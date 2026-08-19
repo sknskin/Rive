@@ -10,6 +10,7 @@ import { READING_SPEED_WINDOW_DAYS } from "@/lib/constants";
 import { dayRange, formatDurationCompact, formatDurationShort } from "@/lib/format";
 import {
   countFinishedBooks,
+  currentStreakDays,
   dailyTotals,
   genreDistribution,
   hourHistogram,
@@ -46,6 +47,7 @@ interface InsightsData {
   weekdayHist: number[];
   genres: GenreSeconds[];
   heatTotals: Map<string, number>;
+  streakDays: number;
   nowMs: number;
   hasAnySession: boolean;
 }
@@ -107,6 +109,9 @@ function buildInsights(
     weekdayHist: weekdayHistogram(sessions),
     genres: genreDistribution(sessions, categoriesByBookId),
     heatTotals: dailyTotals(sessions),
+    // 연속 독서 일수 — 동기부여 지표, 압박 없는 톤으로 2일 이상일 때만 표시 (리서치 C1)
+    // Reading streak — shown only from two days up, keeping the pressure-free tone
+    streakDays: currentStreakDays(dailyTotals(sessions), nowMs),
     nowMs,
     hasAnySession: sessions.length > 0,
   };
@@ -205,6 +210,13 @@ export default function InsightsPage() {
       }`}
     >
       <h1 className="text-2xl font-bold tracking-tight">Insights</h1>
+      {/* 연속 독서 — 2일 이상일 때만, 담백하게 (스펙 압박 금지 톤) */}
+      {/* Reading streak — only from two days up, kept understated */}
+      {data && data.streakDays >= 2 && (
+        <p className="nums mt-1 text-sm text-ink-secondary">
+          {data.streakDays}일 연속으로 읽고 있어요
+        </p>
+      )}
 
       {loadError !== "" && <p className="mt-6 text-sm text-danger">{loadError}</p>}
 
