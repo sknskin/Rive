@@ -115,6 +115,33 @@
 
 ---
 
+## P2·P3 버킷 완료 (2026-08-19, 버킷별 검증-작업 사이클로 진행)
+
+전부 구현 + 브라우저 실측 검증(각 항목 E2E) + 테스트 60개·린트·타입체크·빌드 통과:
+
+- **P2 14건**: Notes/Quotes(§27, Book Detail 관리+삭제), Goals(§36, 연간 목표+진행바 —
+  검증 중 발견한 '세션 0건이면 진입점 소실' 결함 수정 포함), 과거의 오늘(§28, Today 섹션),
+  Up Next(§37, Book Detail 토글+READ Sheet 별도 섹션), Mood 추천(§53)+시간 추천(§54,
+  MoodSheet→추천 파이프라인 힌트, 컨텍스트 라벨), Taste Change(§47)+Reading DNA(§55)+
+  AI Book Twin(§57 — 분석 1회 통합, DNA 슬라이더·트윈 실호출 렌더 확인), 완독 추가
+  평가(§25, 별점 후 선택 2단계 — fun4/immersion5 저장 실측), Like 피드백(§50, 하트 토글
+  + behavior.likedBooks로 AI 전달), 추천 카테고리(§52, 랭킹이 4종 배정→그룹 헤더),
+  Library Grid/List 전환(§21), 온보딩 나이/성별(§40–41, 선택 스텝), 장르 시간 가중치
+  1/n 분배.
+- **P3**: Wrapped 월간/연간(§58, 통계 계산+AI 한 줄 요약 캐시 — 실호출·캐시 재사용 검증)
+  + 공유 이미지(§82, 캔버스 PNG — 실제 다운로드 파일 육안 확인), Import/Export(§82,
+  설정 시트에서 JSON 내보내기/병합 가져오기 — 가져오기 1건 IndexedDB 실측).
+  ※ AI Book Twin·Reading Plan(완독 목표일 D-day·하루 페이지)은 P2에 통합 구현.
+- **부채**: 라우트 테스트 8개 추가(search 폴백 체인·enrich OL 폴백, fetch 모킹),
+  쓰기 전용 필드 배선 — feedbackReason→AI 신호, source→검색 출처 캡션,
+  sessionCount→기간 타일 '기록 n회', googleBooksId→책 정보 링크 폴백.
+
+### 잔여 (정직 기록)
+- `PreferenceProfile.updatedAt` 미배선 — **설문 다시 하기 기능이 없어서** 표시 맥락도
+  없음. 재온보딩 기능과 함께 처리할 것 (신규 항목).
+- tasteChanges는 데이터 축적 전이라 AI가 빈 배열 반환(정상 동작) — 수개월 데이터 후 검증.
+- 컴포넌트(React) 테스트는 여전히 없음 — jsdom+testing-library 의존성 승인 필요.
+
 ## P2 — 스펙 2차 기능 (§81)
 
 | 항목 | 스펙 | 현재 사실 |
