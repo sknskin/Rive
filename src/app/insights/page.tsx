@@ -3,7 +3,10 @@
 import { useEffect, useState } from "react";
 import HourBars from "@/components/insights/HourBars";
 import WeekdayBars from "@/components/insights/WeekdayBars";
+import WrappedSheet from "@/components/insights/WrappedSheet";
 import YearHeatmap from "@/components/insights/YearHeatmap";
+import { computeWrappedStats, type WrappedScope, type WrappedStats } from "@/lib/wrapped";
+import type { Book } from "@/lib/types";
 import { READING_SPEED_WINDOW_DAYS } from "@/lib/constants";
 import { dayRange, formatDurationCompact, formatDurationShort } from "@/lib/format";
 import {
@@ -24,7 +27,9 @@ import {
   type RangeSummary,
 } from "@/lib/insights";
 import { getRepository } from "@/lib/repository";
-import type { ReadingSession, UserBook } from "@/lib/types";
+import type { ReadingGoals, ReadingSession, UserBook } from "@/lib/types";
+import BottomSheet from "@/components/BottomSheet";
+import { motion } from "motion/react";
 
 const MS_PER_DAY = 24 * 3600 * 1000;
 
@@ -116,7 +121,32 @@ function formatHourLabel(hour: number): string {
 // Insights — meaningful summaries before raw numbers (spec §29)
 export default function InsightsPage() {
   const [data, setData] = useState<InsightsData | null>(null);
+  const [goals, setGoals] = useState<ReadingGoals | null>(null);
+  const [goalsSheetOpen, setGoalsSheetOpen] = useState(false);
+  const [wrappedStats, setWrappedStats] = useState<WrappedStats | null>(null);
   const [loadError, setLoadError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+
+  // 리캡 열기 — 클릭 시점 데이터로 통계를 계산한다
+  // Open wrapped — stats computed from data at click time
+  async function openWrapped(scope: WrappedScope) {
+    try {
+      const repository = getRepository();
+      const sessions = await repository.listAllSessions();
+      const userBooks = await repository.listUserBooks();
+      const booksById = new Map<string, Book>();
+      for (const bookId of new Set(sessions.map((session) => session.bookId))) {
+        const book = await repository.getBook(bookId);
+        if (book) {
+          booksById.set(bookId, book);
+        }
+      }
+      setWrappedStats(computeWrappedStats(scope, new Date(), sessions, userBooks, booksById));
+    } catch (error) {
+      console.error("[Insights] failed to open wrapped:", error);
+      setLoadError("리캡을 준비하지 못했어요.");
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -126,6 +156,7 @@ export default function InsightsPage() {
       try {
         const sessions = await repository.listAllSessions();
         const userBooks = await repository.listUserBooks();
+        const loadedGoals = await repository.getGoals();
 
         // 장르 분포용 — 세션에 등장한 책의 카테고리를 모은다
         // For genre distribution — gather categories of books that have sessions
@@ -140,6 +171,7 @@ export default function InsightsPage() {
 
         if (!cancelled) {
           setData(buildInsights(sessions, userBooks, categoriesByBookId));
+          setGoals(loadedGoals ?? null);
           setLoadError("");
         }
       } catch (error) {
@@ -154,7 +186,7 @@ export default function InsightsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadKey]);
 
   return (
     <main
@@ -165,6 +197,53 @@ export default function InsightsPage() {
       <h1 className="text-2xl font-bold tracking-tight">Insights</h1>
 
       {loadError !== "" && <p className="mt-6 text-sm text-danger">{loadError}</p>}
+
+      {/* 목표는 기록이 없어도 세울 수 있어야 한다 — 빈 상태와 무관하게 표시 */}
+      {/* Goals must be reachable even with zero sessions — shown regardless of empty state */}
+      {data && (
+        <section className="mt-6" aria-label="독서 목표">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-xs font-semibold tracking-wide text-ink-tertiary uppercase">
+              Goals {new Date(data.nowMs).getFullYear()}
+            </h2>
+            <button
+              type="button"
+              onClick={() => setGoalsSheetOpen(true)}
+              className="cursor-pointer text-sm font-medium text-tint active:opacity-70"
+            >
+              {goals ? "목표 수정" : "올해 목표 세우기"}
+            </button>
+          </div>
+          {goals && (goals.targetBooks > 0 || goals.targetPages > 0 || goals.targetHours > 0) && (
+            <div className="mt-3 flex flex-col gap-3">
+              {goals.targetBooks > 0 && (
+                <GoalBar
+                  label="완독"
+                  current={data.periods[3].finishedBooks ?? 0}
+                  target={goals.targetBooks}
+                  unit="권"
+                />
+              )}
+              {goals.targetPages > 0 && (
+                <GoalBar
+                  label="페이지"
+                  current={data.periods[3].summary.totalPages}
+                  target={goals.targetPages}
+                  unit="쪽"
+                />
+              )}
+              {goals.targetHours > 0 && (
+                <GoalBar
+                  label="시간"
+                  current={Math.floor(data.periods[3].summary.totalSeconds / 3600)}
+                  target={goals.targetHours}
+                  unit="시간"
+                />
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
       {data && !data.hasAnySession && (
         <div className="mt-24 text-center">
@@ -181,6 +260,30 @@ export default function InsightsPage() {
 
       {data && data.hasAnySession && (
         <>
+          <section className="mt-6" aria-label="리캡">
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-xs font-semibold tracking-wide text-ink-tertiary uppercase">
+                Wrapped
+              </h2>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => void openWrapped("month")}
+                  className="cursor-pointer text-sm font-medium text-tint active:opacity-70"
+                >
+                  이번 달
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void openWrapped("year")}
+                  className="cursor-pointer text-sm font-medium text-tint active:opacity-70"
+                >
+                  올해
+                </button>
+              </div>
+            </div>
+          </section>
+
           <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
             {data.periods.map((period) => (
               <div key={period.label} className="rounded-2xl bg-elevated p-4 ring-1 ring-separator">
@@ -194,7 +297,7 @@ export default function InsightsPage() {
                   {period.summary.totalPages} pages
                 </p>
                 <p className="nums text-sm text-ink-secondary">
-                  {period.summary.readingDays}일 독서
+                  {period.summary.readingDays}일 독서 · 기록 {period.summary.sessionCount}회
                   {period.finishedBooks !== null &&
                     period.finishedBooks > 0 &&
                     ` · ${period.finishedBooks}권 완독`}
@@ -291,6 +394,161 @@ export default function InsightsPage() {
           </div>
         </>
       )}
+
+      <WrappedSheet
+        open={wrappedStats !== null}
+        onClose={() => setWrappedStats(null)}
+        stats={wrappedStats}
+      />
+
+      <BottomSheet open={goalsSheetOpen} onClose={() => setGoalsSheetOpen(false)}>
+        <GoalsForm
+          existing={goals}
+          onSaved={() => {
+            setGoalsSheetOpen(false);
+            setReloadKey((key) => key + 1);
+          }}
+        />
+      </BottomSheet>
     </main>
+  );
+}
+
+// 목표 진행 바 — 압박 없이 담백하게 (스펙 §36, §86)
+// Goal progress bar — calm, no pressure (spec §36, §86)
+function GoalBar({
+  label,
+  current,
+  target,
+  unit,
+}: {
+  label: string;
+  current: number;
+  target: number;
+  unit: string;
+}) {
+  const percent = Math.min(100, Math.round((current / target) * 100));
+  return (
+    <div>
+      <div className="nums flex items-baseline justify-between text-sm">
+        <span className="font-medium">{label}</span>
+        <span className="text-ink-secondary">
+          {current.toLocaleString()} / {target.toLocaleString()}
+          {unit}
+        </span>
+      </div>
+      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-fill">
+        <div
+          className="h-full rounded-full bg-tint transition-[width] duration-500"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function GoalsForm({
+  existing,
+  onSaved,
+}: {
+  existing: ReadingGoals | null;
+  onSaved: () => void;
+}) {
+  const [booksText, setBooksText] = useState(
+    existing && existing.targetBooks > 0 ? String(existing.targetBooks) : "",
+  );
+  const [pagesText, setPagesText] = useState(
+    existing && existing.targetPages > 0 ? String(existing.targetPages) : "",
+  );
+  const [hoursText, setHoursText] = useState(
+    existing && existing.targetHours > 0 ? String(existing.targetHours) : "",
+  );
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  function parseTarget(text: string): number {
+    const value = Number.parseInt(text, 10);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setSaveError("");
+    try {
+      await getRepository().saveGoals({
+        year: new Date().getFullYear(),
+        targetBooks: parseTarget(booksText),
+        targetPages: parseTarget(pagesText),
+        targetHours: parseTarget(hoursText),
+        updatedAt: Date.now(),
+      });
+      onSaved();
+    } catch (error) {
+      console.error("[Goals] failed to save:", error);
+      setSaveError("목표를 저장하지 못했어요. 다시 시도해 주세요.");
+      setSaving(false);
+    }
+  }
+
+  const inputClass =
+    "nums w-full rounded-xl bg-fill px-3.5 py-3 text-[15px] outline-none placeholder:text-ink-tertiary focus:ring-2 focus:ring-tint";
+
+  return (
+    <div className="px-2 pt-2">
+      <h2 className="px-1 text-lg font-semibold tracking-tight">올해의 독서 목표</h2>
+      <p className="mt-1 px-1 text-sm text-ink-secondary">
+        원하는 항목만 채워도 돼요
+      </p>
+      <div className="mt-4 flex flex-col gap-3">
+        <label className="flex flex-col gap-1.5 text-sm font-medium text-ink-secondary">
+          완독할 책 (권)
+          <input
+            type="number"
+            inputMode="numeric"
+            min={1}
+            value={booksText}
+            onChange={(event) => setBooksText(event.target.value)}
+            placeholder="예: 24"
+            className={inputClass}
+          />
+        </label>
+        <label className="flex flex-col gap-1.5 text-sm font-medium text-ink-secondary">
+          읽을 페이지 (쪽)
+          <input
+            type="number"
+            inputMode="numeric"
+            min={1}
+            value={pagesText}
+            onChange={(event) => setPagesText(event.target.value)}
+            placeholder="예: 6000"
+            className={inputClass}
+          />
+        </label>
+        <label className="flex flex-col gap-1.5 text-sm font-medium text-ink-secondary">
+          독서 시간 (시간)
+          <input
+            type="number"
+            inputMode="numeric"
+            min={1}
+            value={hoursText}
+            onChange={(event) => setHoursText(event.target.value)}
+            placeholder="예: 100"
+            className={inputClass}
+          />
+        </label>
+      </div>
+
+      {saveError !== "" && <p className="mt-3 text-center text-sm text-danger">{saveError}</p>}
+
+      <motion.button
+        type="button"
+        whileTap={{ scale: 0.97 }}
+        disabled={saving}
+        onClick={() => void handleSave()}
+        className="mt-5 w-full cursor-pointer rounded-2xl bg-accent py-3.5 text-[15px] font-semibold text-accent-ink disabled:opacity-40"
+      >
+        {saving ? "저장하는 중…" : "저장"}
+      </motion.button>
+    </div>
   );
 }
