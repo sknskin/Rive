@@ -100,11 +100,11 @@ function ThemeSheetContent({ onClose }: { onClose: () => void }) {
       <h2 className="mt-4 border-t border-separator px-1 pt-3 text-xs font-semibold tracking-wide text-ink-tertiary uppercase">
         데이터
       </h2>
-      {/* 서버 모드에서는 백업 대상이 로컬 기록임을 명시해 혼동을 막는다 (2차 B6) */}
-      {/* In server mode, clarify that backup targets this device's local records (B6) */}
+      {/* 백업 대상을 명시해 혼동을 막는다 — 서버 모드는 계정 기록 대상 (2차 B6) */}
+      {/* Clarify the backup target — server mode operates on account records (B6) */}
       {isServerMode() && (
         <p className="mt-1 px-1 text-[11px] leading-relaxed text-ink-tertiary">
-          내보내기·가져오기는 이 기기의 로컬 기록을 다뤄요. 계정 기록은 서버에 저장돼 있어요.
+          계정에 저장된 기록을 파일로 내보내고, 파일을 계정으로 가져와요.
         </p>
       )}
       <div className="mt-2 grid grid-cols-2 gap-1.5">

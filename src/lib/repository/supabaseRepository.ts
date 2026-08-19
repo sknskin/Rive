@@ -25,7 +25,7 @@ const UNIQUE_VIOLATION = "23505";
 // ── row 타입과 매퍼 — DB snake_case ↔ 도메인 camelCase ────────────────
 // Row types and mappers — DB snake_case ↔ domain camelCase
 
-interface BookRow {
+export interface BookRow {
   id: string;
   title: string;
   authors: string[];
@@ -41,7 +41,7 @@ interface BookRow {
   enriched_at: number | null;
 }
 
-function rowToBook(row: BookRow): Book {
+export function rowToBook(row: BookRow): Book {
   return {
     id: row.id,
     title: row.title,
@@ -59,7 +59,7 @@ function rowToBook(row: BookRow): Book {
   };
 }
 
-interface UserBookRow {
+export interface UserBookRow {
   book_id: string;
   status: BookStatus;
   current_page: number;
@@ -74,7 +74,7 @@ interface UserBookRow {
   target_date: number | null;
 }
 
-function rowToUserBook(row: UserBookRow): UserBook {
+export function rowToUserBook(row: UserBookRow): UserBook {
   return {
     bookId: row.book_id,
     status: row.status,
@@ -120,7 +120,7 @@ function userBookPatchToRow(patch: Partial<Omit<UserBook, "bookId">>): Record<st
   return row;
 }
 
-interface SessionRow {
+export interface SessionRow {
   id: string;
   book_id: string;
   started_at: number;
@@ -133,7 +133,7 @@ interface SessionRow {
   created_at: number;
 }
 
-function rowToSession(row: SessionRow): ReadingSession {
+export function rowToSession(row: SessionRow): ReadingSession {
   return {
     id: row.id,
     bookId: row.book_id,
@@ -158,7 +158,7 @@ const SESSION_COLUMNS: Record<string, string> = {
   memo: "memo",
 };
 
-interface RecommendationRow {
+export interface RecommendationRow {
   id: string;
   book: BookSearchResult;
   match_percent: number;
@@ -169,7 +169,7 @@ interface RecommendationRow {
   feedback_reason: string | null;
 }
 
-function rowToRecommendation(row: RecommendationRow): AiRecommendation {
+export function rowToRecommendation(row: RecommendationRow): AiRecommendation {
   return {
     id: row.id,
     book: row.book,
