@@ -33,7 +33,7 @@ interface ReadSheetProps {
 // READ is a global action, not tied to a specific book (spec §2, §4)
 export default function ReadSheet({ open, onClose }: ReadSheetProps) {
   return (
-    <BottomSheet open={open} onClose={onClose}>
+    <BottomSheet open={open} onClose={onClose} label="독서 시작">
       {/* 시트가 닫히면 내용이 언마운트되어 상태가 자연스럽게 초기화된다 */}
       {/* Content unmounts when the sheet closes, resetting state naturally */}
       <ReadSheetContent onClose={onClose} />
@@ -57,10 +57,20 @@ function ReadSheetContent({ onClose }: { onClose: () => void }) {
     async function loadPicks() {
       try {
         const repository = getRepository();
-        const readingBooks = await repository.listUserBooksByStatus("reading");
+        // 상태별 목록은 병렬로, 책 정보는 배치로 조회한다 — N+1 방지 (6차 조사 D3·D4)
+        // Parallel status lists and one batched book lookup — avoids N+1 (audit 6 D3, D4)
+        const [readingBooks, wantBooks] = await Promise.all([
+          repository.listUserBooksByStatus("reading"),
+          repository.listUserBooksByStatus("want"),
+        ]);
+        const booksById = await repository.listBooksByIds([
+          ...readingBooks.map((userBook) => userBook.bookId),
+          ...wantBooks.map((userBook) => userBook.bookId),
+        ]);
+
         const loaded: ReadingPick[] = [];
         for (const userBook of readingBooks) {
-          const book = await repository.getBook(userBook.bookId);
+          const book = booksById.get(userBook.bookId);
           if (book) {
             loaded.push({
               book,
@@ -72,11 +82,10 @@ function ReadSheetContent({ onClose }: { onClose: () => void }) {
         // Want to Read 책도 바로 시작할 수 있게 함께 보여준다 (스펙 §4)
         // Up Next로 지정한 책은 별도 섹션으로 우선 노출한다 (스펙 §37)
         // Also surface want-to-read books; Up Next picks get their own section (spec §4, §37)
-        const wantBooks = await repository.listUserBooksByStatus("want");
         const loadedUpNext: ReadingPick[] = [];
         const loadedWant: ReadingPick[] = [];
         for (const userBook of wantBooks) {
-          const book = await repository.getBook(userBook.bookId);
+          const book = booksById.get(userBook.bookId);
           if (!book) {
             continue;
           }
@@ -152,7 +161,7 @@ function ReadSheetContent({ onClose }: { onClose: () => void }) {
                     nextPage: continuePick.nextPage,
                   })
                 }
-                className="mt-2 flex w-full items-center gap-4 rounded-xl p-2 text-left active:bg-fill"
+                className="mt-2 flex w-full cursor-pointer items-center gap-4 rounded-xl p-2 text-left active:bg-fill"
               >
                 <BookCover
                   title={continuePick.book.title}
@@ -190,7 +199,7 @@ function ReadSheetContent({ onClose }: { onClose: () => void }) {
                           nextPage: pick.nextPage,
                         })
                       }
-                      className="flex w-full items-center gap-3.5 rounded-xl p-2 text-left active:bg-fill"
+                      className="flex w-full cursor-pointer items-center gap-3.5 rounded-xl p-2 text-left active:bg-fill"
                     >
                       <BookCover title={pick.book.title} coverUrl={pick.book.coverUrl} size="sm" />
                       <div className="min-w-0 flex-1">
@@ -254,7 +263,7 @@ function ReadSheetContent({ onClose }: { onClose: () => void }) {
                           nextPage: pick.nextPage,
                         })
                       }
-                      className="flex w-full items-center gap-3.5 rounded-xl p-2 text-left active:bg-fill"
+                      className="flex w-full cursor-pointer items-center gap-3.5 rounded-xl p-2 text-left active:bg-fill"
                     >
                       <BookCover title={pick.book.title} coverUrl={pick.book.coverUrl} size="sm" />
                       <div className="min-w-0 flex-1">
@@ -284,7 +293,7 @@ function ReadSheetContent({ onClose }: { onClose: () => void }) {
           <button
             type="button"
             onClick={() => setView({ kind: "search" })}
-            className="mt-5 w-full rounded-2xl bg-fill py-3.5 text-[15px] font-semibold text-tint active:opacity-70"
+            className="mt-5 w-full cursor-pointer rounded-2xl bg-fill py-3.5 text-[15px] font-semibold text-tint active:opacity-70"
           >
             새로운 책 찾기
           </button>
@@ -293,7 +302,18 @@ function ReadSheetContent({ onClose }: { onClose: () => void }) {
 
       {view.kind === "search" && (
         <div>
-          <h2 className="px-3 pt-2 pb-3 text-lg font-semibold tracking-tight">새로운 책 찾기</h2>
+          {/* 검색 뷰에서 목록으로 돌아가는 경로 (5차 조사 M5) */}
+          {/* Way back from search to the pick list (audit 5 M5) */}
+          <div className="flex items-baseline justify-between px-3 pt-2 pb-3">
+            <h2 className="text-lg font-semibold tracking-tight">새로운 책 찾기</h2>
+            <button
+              type="button"
+              onClick={() => setView({ kind: "pick" })}
+              className="cursor-pointer text-sm font-medium text-ink-tertiary transition-colors duration-150 hover:text-ink active:opacity-70"
+            >
+              뒤로
+            </button>
+          </div>
           <BookSearch onSelect={(result) => setView({ kind: "confirmNew", result })} />
         </div>
       )}
@@ -313,6 +333,14 @@ function ReadSheetContent({ onClose }: { onClose: () => void }) {
           {startError !== "" && (
             <p className="mt-3 text-center text-sm text-danger">{startError}</p>
           )}
+          <button
+            type="button"
+            disabled={starting}
+            onClick={() => setView({ kind: "pick" })}
+            className="mt-3 w-full cursor-pointer py-2 text-center text-sm font-medium text-ink-tertiary transition-colors duration-150 hover:text-ink active:opacity-70 disabled:opacity-40"
+          >
+            다른 책 선택
+          </button>
         </>
       )}
 
@@ -329,6 +357,14 @@ function ReadSheetContent({ onClose }: { onClose: () => void }) {
           {startError !== "" && (
             <p className="mt-3 text-center text-sm text-danger">{startError}</p>
           )}
+          <button
+            type="button"
+            disabled={starting}
+            onClick={() => setView({ kind: "search" })}
+            className="mt-3 w-full cursor-pointer py-2 text-center text-sm font-medium text-ink-tertiary transition-colors duration-150 hover:text-ink active:opacity-70 disabled:opacity-40"
+          >
+            다른 책 찾기
+          </button>
         </>
       )}
     </div>

@@ -23,7 +23,7 @@ export default function StatusSheet({ open, currentStatus, onClose, onSelect }: 
   }
 
   return (
-    <BottomSheet open={open} onClose={handleClose}>
+    <BottomSheet open={open} onClose={handleClose} label="상태 변경">
       {!askingDnfReason ? (
         <div className="px-2">
           <h2 className="px-1 pt-2 text-lg font-semibold tracking-tight">상태 변경</h2>
@@ -40,7 +40,8 @@ export default function StatusSheet({ open, currentStatus, onClose, onSelect }: 
                     setAskingDnfReason(false);
                     onSelect(status);
                   }}
-                  className="flex w-full items-center justify-between rounded-xl px-3 py-3.5 text-left text-[15px] font-medium active:bg-fill"
+                  aria-pressed={status === currentStatus}
+                  className="flex w-full cursor-pointer items-center justify-between rounded-xl px-3 py-3.5 text-left text-[15px] font-medium active:bg-fill"
                 >
                   {STATUS_LABELS[status]}
                   {status === currentStatus && <span className="text-tint">✓</span>}
@@ -63,13 +64,22 @@ export default function StatusSheet({ open, currentStatus, onClose, onSelect }: 
                     setAskingDnfReason(false);
                     onSelect("dnf", reason);
                   }}
-                  className="w-full rounded-xl px-3 py-3.5 text-left text-[15px] font-medium active:bg-fill"
+                  className="w-full cursor-pointer rounded-xl px-3 py-3.5 text-left text-[15px] font-medium active:bg-fill"
                 >
                   {reason}
                 </button>
               </li>
             ))}
           </ul>
+          {/* 실수로 중단을 눌렀을 때의 복귀 경로 (5차 조사 M4) */}
+          {/* Way back for users who tapped DNF by mistake (audit 5 M4) */}
+          <button
+            type="button"
+            onClick={() => setAskingDnfReason(false)}
+            className="mt-2 w-full cursor-pointer py-2 text-center text-sm font-medium text-ink-tertiary transition-colors duration-150 hover:text-ink active:opacity-70"
+          >
+            뒤로
+          </button>
         </div>
       )}
     </BottomSheet>
