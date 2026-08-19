@@ -245,13 +245,19 @@ export async function importAllData(file: File): Promise<ImportResult> {
   let imported = 0;
   for (const name of TABLE_NAMES) {
     const rows = payload.tables[name];
-    if (!Array.isArray(rows) || rows.length === 0) {
+    if (!Array.isArray(rows)) {
+      continue;
+    }
+    // 객체가 아닌 행은 걸러낸다 — 손상 파일이 테이블을 오염시키지 않게 (7차 D7 로컬 경로)
+    // Drop non-object rows so a corrupt file cannot pollute the table (audit 7 D7)
+    const validRows = rows.filter((row) => typeof row === "object" && row !== null);
+    if (validRows.length === 0) {
       continue;
     }
     // 동일 id는 백업 내용으로 덮어쓰고, 없는 항목은 추가한다 (병합 복원)
     // Same-id rows are overwritten by the backup; new rows are added (merge restore)
-    await db.table(name).bulkPut(rows);
-    imported += rows.length;
+    await db.table(name).bulkPut(validRows);
+    imported += validRows.length;
   }
 
   notifyLibraryChange();
