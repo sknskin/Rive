@@ -3,10 +3,13 @@
 import { useEffect, useState } from "react";
 import HourBars from "@/components/insights/HourBars";
 import WeekdayBars from "@/components/insights/WeekdayBars";
+import YearHeatmap from "@/components/insights/YearHeatmap";
 import { READING_SPEED_WINDOW_DAYS } from "@/lib/constants";
-import { dayRange, formatDurationShort } from "@/lib/format";
+import { dayRange, formatDurationCompact, formatDurationShort } from "@/lib/format";
 import {
   countFinishedBooks,
+  dailyTotals,
+  genreDistribution,
   hourHistogram,
   monthStart,
   peakHourWindow,
@@ -16,6 +19,7 @@ import {
   weekStart,
   weekdayHistogram,
   yearStart,
+  type GenreSeconds,
   type PeakWindow,
   type RangeSummary,
 } from "@/lib/insights";
@@ -36,10 +40,17 @@ interface InsightsData {
   hourHist: number[];
   peak: PeakWindow | null;
   weekdayHist: number[];
+  genres: GenreSeconds[];
+  heatTotals: Map<string, number>;
+  nowMs: number;
   hasAnySession: boolean;
 }
 
-function buildInsights(sessions: ReadingSession[], userBooks: UserBook[]): InsightsData {
+function buildInsights(
+  sessions: ReadingSession[],
+  userBooks: UserBook[],
+  categoriesByBookId: Map<string, string[]>,
+): InsightsData {
   const now = new Date();
   const nowMs = now.getTime();
   const today = dayRange(now);
@@ -90,6 +101,9 @@ function buildInsights(sessions: ReadingSession[], userBooks: UserBook[]): Insig
     hourHist,
     peak: peakHourWindow(hourHist),
     weekdayHist: weekdayHistogram(sessions),
+    genres: genreDistribution(sessions, categoriesByBookId),
+    heatTotals: dailyTotals(sessions),
+    nowMs,
     hasAnySession: sessions.length > 0,
   };
 }
@@ -112,8 +126,20 @@ export default function InsightsPage() {
       try {
         const sessions = await repository.listAllSessions();
         const userBooks = await repository.listUserBooks();
+
+        // 장르 분포용 — 세션에 등장한 책의 카테고리를 모은다
+        // For genre distribution — gather categories of books that have sessions
+        const categoriesByBookId = new Map<string, string[]>();
+        const uniqueBookIds = [...new Set(sessions.map((session) => session.bookId))];
+        for (const bookId of uniqueBookIds) {
+          const book = await repository.getBook(bookId);
+          if (book?.categories && book.categories.length > 0) {
+            categoriesByBookId.set(bookId, book.categories);
+          }
+        }
+
         if (!cancelled) {
-          setData(buildInsights(sessions, userBooks));
+          setData(buildInsights(sessions, userBooks, categoriesByBookId));
           setLoadError("");
         }
       } catch (error) {
@@ -132,7 +158,7 @@ export default function InsightsPage() {
 
   return (
     <main
-      className={`flex-1 px-5 pt-14 pb-36 transition-opacity duration-300 ${
+      className={`flex-1 px-5 pt-8 pb-20 transition-opacity duration-300 ${
         data || loadError ? "opacity-100" : "opacity-0"
       }`}
     >
@@ -141,14 +167,21 @@ export default function InsightsPage() {
       {loadError !== "" && <p className="mt-6 text-sm text-danger">{loadError}</p>}
 
       {data && !data.hasAnySession && (
-        <p className="mt-16 text-center text-[15px] text-ink-secondary">
-          아직 기록이 부족해요. 책을 읽으면 통계가 쌓여요.
-        </p>
+        <div className="mt-24 text-center">
+          <p className="text-[17px] font-semibold tracking-tight">
+            아직 보여드릴 통계가 없어요
+          </p>
+          <p className="mt-3 text-[15px] leading-relaxed text-ink-secondary">
+            책을 읽기 시작하면
+            <br />
+            이 공간이 조금씩 채워질 거예요
+          </p>
+        </div>
       )}
 
       {data && data.hasAnySession && (
         <>
-          <div className="mt-6 grid grid-cols-2 gap-3">
+          <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
             {data.periods.map((period) => (
               <div key={period.label} className="rounded-2xl bg-elevated p-4 ring-1 ring-separator">
                 <p className="text-xs font-semibold tracking-wide text-ink-tertiary">
@@ -170,6 +203,10 @@ export default function InsightsPage() {
             ))}
           </div>
 
+          {/* 데스크톱: 좌측 속도·시간대·요일 / 우측 히트맵·장르 2단 배치 */}
+          {/* Desktop: two columns — speed/time/weekday left, heatmap/genres right */}
+          <div className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-14">
+          <div>
           {data.speed > 0 && (
             <section className="mt-8" aria-label="독서 속도">
               <h2 className="text-xs font-semibold tracking-wide text-ink-tertiary uppercase">
@@ -210,6 +247,48 @@ export default function InsightsPage() {
               <WeekdayBars histogram={data.weekdayHist} />
             </div>
           </section>
+          </div>
+
+          <div>
+          <section className="mt-8" aria-label="연간 독서 활동">
+            <h2 className="text-xs font-semibold tracking-wide text-ink-tertiary uppercase">
+              Activity
+            </h2>
+            <div className="mt-4">
+              <YearHeatmap totalsByDay={data.heatTotals} nowMs={data.nowMs} />
+            </div>
+          </section>
+
+          {data.genres.length > 0 && (
+            <section className="mt-8" aria-label="장르 분석">
+              <h2 className="text-xs font-semibold tracking-wide text-ink-tertiary uppercase">
+                Genres
+              </h2>
+              <div className="mt-4 flex flex-col gap-2.5">
+                {data.genres.map((genre) => {
+                  const max = data.genres[0]?.totalSeconds ?? 1;
+                  return (
+                    <div key={genre.name} className="flex items-center gap-3">
+                      <span className="w-24 shrink-0 truncate text-[13px] font-medium md:w-32">
+                        {genre.name}
+                      </span>
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-fill">
+                        <div
+                          className="h-full rounded-full bg-tint transition-[width] duration-500"
+                          style={{ width: `${Math.round((genre.totalSeconds / max) * 100)}%` }}
+                        />
+                      </div>
+                      <span className="nums w-12 shrink-0 text-right text-[13px] text-ink-secondary">
+                        {formatDurationCompact(genre.totalSeconds)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+          </div>
+          </div>
         </>
       )}
     </main>

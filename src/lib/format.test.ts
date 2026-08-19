@@ -6,7 +6,7 @@ import {
   formatPageRange,
   formatStopwatch,
   formatTimeOfDay,
-  greetingForHour,
+  greetingForDate,
 } from "./format";
 
 describe("formatStopwatch", () => {
@@ -28,6 +28,10 @@ describe("formatStopwatch", () => {
 });
 
 describe("formatDurationShort", () => {
+  it("0초는 0분으로 표시한다", () => {
+    expect(formatDurationShort(0)).toBe("0분");
+  });
+
   it("1분 미만을 표시한다", () => {
     expect(formatDurationShort(30)).toBe("1분 미만");
   });
@@ -82,17 +86,26 @@ describe("dayRange", () => {
   });
 });
 
-describe("greetingForHour", () => {
-  it("아침 인사를 반환한다", () => {
-    expect(greetingForHour(8)).toBe("좋은 아침이에요");
+describe("greetingForDate", () => {
+  it("시간대마다 항상 문자열 문구를 반환한다", () => {
+    for (let hour = 0; hour < 24; hour++) {
+      const phrase = greetingForDate(new Date(2026, 7, 18, hour, 0));
+      expect(phrase.length).toBeGreaterThan(0);
+    }
   });
 
-  it("오후 인사를 반환한다", () => {
-    expect(greetingForHour(14)).toBe("좋은 오후예요");
+  it("같은 시간대라도 날짜가 다르면 문구가 로테이션된다", () => {
+    const day1 = greetingForDate(new Date(2026, 7, 18, 9, 0));
+    const day2 = greetingForDate(new Date(2026, 7, 19, 9, 0));
+    const day3 = greetingForDate(new Date(2026, 7, 20, 9, 0));
+    // 문구 풀이 3개이므로 연속 3일 중 최소 2개는 서로 달라야 한다
+    const unique = new Set([day1, day2, day3]);
+    expect(unique.size).toBeGreaterThan(1);
   });
 
-  it("저녁/새벽 인사를 반환한다", () => {
-    expect(greetingForHour(22)).toBe("좋은 저녁이에요");
-    expect(greetingForHour(2)).toBe("좋은 저녁이에요");
+  it("낮 시간(14시)에 저녁 문구가 나오지 않는다", () => {
+    const phrase = greetingForDate(new Date(2026, 7, 18, 14, 0));
+    expect(phrase).not.toContain("저녁");
+    expect(phrase).not.toContain("밤");
   });
 });

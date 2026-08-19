@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   countFinishedBooks,
+  dailyTotals,
+  dayKey,
+  estimateDaysToFinish,
+  genreDistribution,
+  heatLevel,
   hourHistogram,
   monthStart,
   peakHourWindow,
@@ -142,6 +147,81 @@ describe("weekdayHistogram", () => {
     const histogram = weekdayHistogram(sessions);
     expect(histogram[2]).toBe(300);
     expect(histogram[0]).toBe(200);
+  });
+});
+
+describe("dailyTotals / heatLevel", () => {
+  it("같은 날짜의 세션을 합산한다", () => {
+    const morning = new Date(2026, 7, 18, 8, 0).getTime();
+    const night = new Date(2026, 7, 18, 21, 0).getTime();
+    const other = new Date(2026, 7, 17, 9, 0).getTime();
+    const totals = dailyTotals([
+      makeSession({ startedAt: morning, durationSeconds: 600 }),
+      makeSession({ startedAt: night, durationSeconds: 300 }),
+      makeSession({ startedAt: other, durationSeconds: 100 }),
+    ]);
+    expect(totals.get(dayKey(morning))).toBe(900);
+    expect(totals.get(dayKey(other))).toBe(100);
+  });
+
+  it("독서량을 0-4 강도로 변환한다", () => {
+    expect(heatLevel(0)).toBe(0);
+    expect(heatLevel(60)).toBe(1);
+    expect(heatLevel(20 * 60)).toBe(2);
+    expect(heatLevel(60 * 60)).toBe(3);
+    expect(heatLevel(2 * 3600)).toBe(4);
+  });
+});
+
+describe("estimateDaysToFinish", () => {
+  const now = new Date(2026, 7, 18, 12, 0).getTime();
+
+  it("최근 30일 페이스로 남은 페이지를 나눠 올림한다", () => {
+    // 최근 30일간 150페이지 → 하루 5페이지, 남은 100페이지 → 20일
+    const sessions = [
+      makeSession({ startedAt: now - 5 * 24 * 3600 * 1000, pagesRead: 150 }),
+    ];
+    expect(estimateDaysToFinish(sessions, 200, 300, now)).toBe(20);
+  });
+
+  it("최근 기록이 없으면 null을 반환한다", () => {
+    const old = makeSession({ startedAt: now - 40 * 24 * 3600 * 1000, pagesRead: 100 });
+    expect(estimateDaysToFinish([old], 200, 300, now)).toBeNull();
+  });
+
+  it("pageCount가 없거나 이미 끝까지 읽었으면 null을 반환한다", () => {
+    const sessions = [makeSession({ startedAt: now, pagesRead: 10 })];
+    expect(estimateDaysToFinish(sessions, 50, 0, now)).toBeNull();
+    expect(estimateDaysToFinish(sessions, 300, 300, now)).toBeNull();
+    expect(estimateDaysToFinish(sessions, 0, 300, now)).toBeNull();
+  });
+});
+
+describe("genreDistribution", () => {
+  it("독서 시간을 책 카테고리에 배분해 내림차순으로 반환한다", () => {
+    const sessions = [
+      makeSession({ bookId: "a", durationSeconds: 600 }),
+      makeSession({ bookId: "a", durationSeconds: 300 }),
+      makeSession({ bookId: "b", durationSeconds: 200 }),
+    ];
+    const categories = new Map([
+      ["a", ["History"]],
+      ["b", ["Science", "History"]],
+    ]);
+    const result = genreDistribution(sessions, categories);
+    expect(result[0]).toEqual({ name: "History", totalSeconds: 1100 });
+    expect(result[1]).toEqual({ name: "Science", totalSeconds: 200 });
+  });
+
+  it("카테고리 없는 책만 있으면 빈 배열을 반환한다", () => {
+    const sessions = [makeSession({ bookId: "a", durationSeconds: 600 })];
+    expect(genreDistribution(sessions, new Map())).toEqual([]);
+  });
+
+  it("topN 개수만큼 자른다", () => {
+    const sessions = [makeSession({ bookId: "a", durationSeconds: 100 })];
+    const categories = new Map([["a", ["G1", "G2", "G3"]]]);
+    expect(genreDistribution(sessions, categories, 2)).toHaveLength(2);
   });
 });
 

@@ -132,6 +132,101 @@ export function weekdayHistogram(sessions: ReadingSession[]): number[] {
   return histogram;
 }
 
+// 히트맵 강도 단계 경계(초) — 15분/45분/90분 (스펙 §30)
+// Heatmap intensity thresholds in seconds — 15/45/90 minutes (spec §30)
+const HEAT_LEVEL_1_SECONDS = 1;
+const HEAT_LEVEL_2_SECONDS = 15 * 60;
+const HEAT_LEVEL_3_SECONDS = 45 * 60;
+const HEAT_LEVEL_4_SECONDS = 90 * 60;
+
+// 'YYYY-M-D' 로컬 날짜 키
+// 'YYYY-M-D' local date key
+export function dayKey(ms: number): string {
+  const date = new Date(ms);
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+// 날짜별 독서량(초) 집계 — 히트맵의 데이터 소스
+// Daily reading totals in seconds — the heatmap's data source
+export function dailyTotals(sessions: ReadingSession[]): Map<string, number> {
+  const totals = new Map<string, number>();
+  for (const session of sessions) {
+    const key = dayKey(session.startedAt);
+    totals.set(key, (totals.get(key) ?? 0) + session.durationSeconds);
+  }
+  return totals;
+}
+
+// 독서량(초) → 히트맵 강도 0–4
+// Reading seconds → heatmap intensity 0–4
+export function heatLevel(totalSeconds: number): number {
+  if (totalSeconds < HEAT_LEVEL_1_SECONDS) {
+    return 0;
+  }
+  if (totalSeconds < HEAT_LEVEL_2_SECONDS) {
+    return 1;
+  }
+  if (totalSeconds < HEAT_LEVEL_3_SECONDS) {
+    return 2;
+  }
+  if (totalSeconds < HEAT_LEVEL_4_SECONDS) {
+    return 3;
+  }
+  return 4;
+}
+
+// 예상 완독일 — 최근 독서 페이스 기반, AI 미사용 (스펙 §35)
+// Estimated days to finish — based on recent pace, no AI (spec §35)
+const ESTIMATE_WINDOW_DAYS = 30;
+const MS_PER_DAY_ESTIMATE = 24 * 3600 * 1000;
+
+export function estimateDaysToFinish(
+  sessions: ReadingSession[],
+  currentPage: number,
+  pageCount: number,
+  nowMs: number,
+): number | null {
+  if (pageCount <= 0 || currentPage <= 0 || currentPage >= pageCount) {
+    return null;
+  }
+  const windowStart = nowMs - ESTIMATE_WINDOW_DAYS * MS_PER_DAY_ESTIMATE;
+  const recentPages = sessions
+    .filter((session) => session.startedAt >= windowStart)
+    .reduce((sum, session) => sum + session.pagesRead, 0);
+  if (recentPages <= 0) {
+    return null;
+  }
+  const pagesPerDay = recentPages / ESTIMATE_WINDOW_DAYS;
+  return Math.max(1, Math.ceil((pageCount - currentPage) / pagesPerDay));
+}
+
+export interface GenreSeconds {
+  name: string;
+  totalSeconds: number;
+}
+
+const GENRE_TOP_N = 6;
+
+// 장르 분포 — 실제 독서 시간을 책의 카테고리에 배분해 집계 (스펙 §33, AI 미사용)
+// Genre distribution — allocates actual reading time to book categories (spec §33, no AI)
+export function genreDistribution(
+  sessions: ReadingSession[],
+  categoriesByBookId: Map<string, string[]>,
+  topN: number = GENRE_TOP_N,
+): GenreSeconds[] {
+  const totals = new Map<string, number>();
+  for (const session of sessions) {
+    const categories = categoriesByBookId.get(session.bookId) ?? [];
+    for (const category of categories) {
+      totals.set(category, (totals.get(category) ?? 0) + session.durationSeconds);
+    }
+  }
+  return [...totals.entries()]
+    .map(([name, totalSeconds]) => ({ name, totalSeconds }))
+    .sort((a, b) => b.totalSeconds - a.totalSeconds)
+    .slice(0, topN);
+}
+
 // 기간 내 완독한 책 수
 // Books finished within the range
 export function countFinishedBooks(
