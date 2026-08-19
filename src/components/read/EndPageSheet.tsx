@@ -14,6 +14,9 @@ interface EndPageSheetProps {
   saving: boolean;
   saveError: string;
   onSave: (input: { endPage: number; memo: string; markAsRead: boolean }) => void;
+  // 기록 없이 세션을 버리는 탈출 경로 (BACKLOG P0-A)
+  // Escape hatch to discard the session without saving (BACKLOG P0-A)
+  onDiscard: () => void;
 }
 
 // 종료 페이지 입력 — 사용자가 입력할 유일한 필수 값 (스펙 §11)
@@ -27,10 +30,14 @@ export default function EndPageSheet({
   saving,
   saveError,
   onSave,
+  onDiscard,
 }: EndPageSheetProps) {
   const [pageText, setPageText] = useState("");
   const [memo, setMemo] = useState("");
   const [markAsRead, setMarkAsRead] = useState(true);
+  // 오조작 방지 — 첫 탭은 확인 문구로 전환, 두 번째 탭에 실제 폐기
+  // Two-tap guard — first tap arms the confirmation, second tap discards
+  const [discardArmed, setDiscardArmed] = useState(false);
 
   const parsed = Number.parseInt(pageText, 10);
   const validPage = Number.isFinite(parsed) && parsed >= startPage;
@@ -102,6 +109,25 @@ export default function EndPageSheet({
         >
           {saving ? "저장하는 중…" : "저장"}
         </motion.button>
+
+        <button
+          type="button"
+          disabled={saving}
+          onClick={() => {
+            if (discardArmed) {
+              onDiscard();
+            } else {
+              setDiscardArmed(true);
+            }
+          }}
+          className={`mt-4 w-full cursor-pointer py-1.5 text-sm font-medium transition-colors duration-150 disabled:opacity-40 ${
+            discardArmed ? "text-danger" : "text-ink-tertiary"
+          }`}
+        >
+          {discardArmed
+            ? "한 번 더 누르면 기록 없이 종료돼요"
+            : "기록하지 않고 종료"}
+        </button>
       </div>
     </BottomSheet>
   );

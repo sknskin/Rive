@@ -15,6 +15,10 @@ import type {
 export interface ReadingRepository {
   upsertBookByIsbn(book: Omit<Book, "id" | "createdAt">): Promise<Book>;
   getBook(bookId: string): Promise<Book | undefined>;
+  updateBookMeta(
+    bookId: string,
+    patch: Partial<Pick<Book, "pageCount" | "description" | "categories" | "enrichedAt">>,
+  ): Promise<void>;
 
   getUserBook(bookId: string): Promise<UserBook | undefined>;
   listUserBooks(): Promise<UserBook[]>;
@@ -24,10 +28,17 @@ export interface ReadingRepository {
   touchLastRead(bookId: string, currentPage: number, timestamp: number): Promise<void>;
 
   addSession(session: Omit<ReadingSession, "id" | "createdAt">): Promise<ReadingSession>;
+  // 오입력 정정 수단 — 세션 수정/삭제와 책 완전 제거 (BACKLOG P0-B)
+  // Correction tools — session edit/delete and full book removal (BACKLOG P0-B)
+  updateSession(
+    id: string,
+    patch: Partial<Omit<ReadingSession, "id" | "bookId" | "createdAt">>,
+  ): Promise<void>;
+  deleteSession(id: string): Promise<void>;
+  removeBookCompletely(bookId: string): Promise<void>;
   listSessionsByDateRange(startMs: number, endMs: number): Promise<ReadingSession[]>;
   listSessionsForBook(bookId: string): Promise<ReadingSession[]>;
   listAllSessions(): Promise<ReadingSession[]>;
-  getLastSessionForBook(bookId: string): Promise<ReadingSession | undefined>;
 
   getActiveSession(): Promise<ActiveSession | undefined>;
   startActiveSession(bookId: string, startPage: number, startedAt: number): Promise<void>;

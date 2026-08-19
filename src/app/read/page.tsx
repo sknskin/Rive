@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import BottomSheet from "@/components/BottomSheet";
+import RatingStars from "@/components/library/RatingStars";
 import EndPageSheet from "@/components/read/EndPageSheet";
 import Stopwatch from "@/components/read/Stopwatch";
 import { MIN_SESSION_SECONDS } from "@/lib/constants";
+import { hapticSuccess, hapticTap } from "@/lib/haptics";
 import { getRepository } from "@/lib/repository";
 import type { ActiveSession, Book } from "@/lib/types";
 
@@ -23,6 +25,9 @@ export default function ReadPage() {
   const [shortWarnOpen, setShortWarnOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  // 완독 직후 별점을 바로 받는다 — AI 취향 분석의 핵심 입력 (스펙 §25, BACKLOG P0-C)
+  // Prompt for a rating right after finishing — key input for AI analysis (spec §25)
+  const [ratingBookId, setRatingBookId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -68,6 +73,7 @@ export default function ReadPage() {
       return;
     }
 
+    hapticTap();
     setStoppedAt(now);
     setEndSheetOpen(true);
   }
@@ -115,6 +121,15 @@ export default function ReadPage() {
         await repository.setBookStatus(active.bookId, "read");
       }
       await repository.clearActiveSession();
+      hapticSuccess();
+      if (input.markAsRead) {
+        // 완독이면 홈 복귀 전에 별점 시트를 먼저 보여준다
+        // On finish, show the rating sheet before returning home
+        setEndSheetOpen(false);
+        setSaving(false);
+        setRatingBookId(active.bookId);
+        return;
+      }
       router.replace("/");
     } catch (error) {
       // 저장 실패 시 입력값을 유지한 채 에러를 보여준다
@@ -122,6 +137,21 @@ export default function ReadPage() {
       console.error("[ReadPage] failed to save session:", error);
       setSaveError("기록을 저장하지 못했어요. 다시 시도해 주세요.");
       setSaving(false);
+    }
+  }
+
+  async function handleRatingSave(rating: number) {
+    if (!ratingBookId) {
+      return;
+    }
+    try {
+      await getRepository().updateUserBook(ratingBookId, { rating });
+      router.replace("/");
+    } catch (error) {
+      console.error("[ReadPage] failed to save rating:", error);
+      // 별점 저장이 실패해도 완독 처리는 끝났으므로 홈으로 보낸다
+      // Finishing already succeeded, so return home even if the rating fails
+      router.replace("/");
     }
   }
 
@@ -167,7 +197,29 @@ export default function ReadPage() {
         saving={saving}
         saveError={saveError}
         onSave={(input) => void handleSave(input)}
+        onDiscard={() => void handleDiscard()}
       />
+
+      <BottomSheet open={ratingBookId !== null} onClose={() => router.replace("/")}>
+        <div className="px-2 pt-2 text-center">
+          <h2 className="text-lg font-semibold tracking-tight">한 권을 다 읽었어요, 축하해요</h2>
+          <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
+            이 책, 어땠나요?
+            <br />
+            별점은 취향 분석에 큰 도움이 돼요
+          </p>
+          <div className="mt-5">
+            <RatingStars rating={0} onChange={(rating) => void handleRatingSave(rating)} />
+          </div>
+          <button
+            type="button"
+            onClick={() => router.replace("/")}
+            className="mt-6 w-full cursor-pointer py-2 text-sm font-medium text-ink-tertiary"
+          >
+            나중에 할게요
+          </button>
+        </div>
+      </BottomSheet>
 
       <BottomSheet open={shortWarnOpen} onClose={() => setShortWarnOpen(false)}>
         <div className="px-2 pt-2 text-center">

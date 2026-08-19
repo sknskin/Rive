@@ -4,10 +4,14 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import BookCover from "@/components/BookCover";
+import BottomSheet from "@/components/BottomSheet";
 import RatingStars from "@/components/library/RatingStars";
 import StatusSheet from "@/components/library/StatusSheet";
 import ManualSessionSheet from "@/components/read/ManualSessionSheet";
+import { recomputeBookProgress } from "@/lib/bookProgress";
 import { DEFAULT_START_PAGE, STATUS_LABELS } from "@/lib/constants";
+import { enrichBookMeta } from "@/lib/enrichBook";
+import { notifyLibraryChange } from "@/lib/libraryEvents";
 import {
   formatDurationShort,
   formatPageRange,
@@ -15,6 +19,7 @@ import {
   formatTimeOfDay,
 } from "@/lib/format";
 import { useStartReading } from "@/lib/hooks/useStartReading";
+import { estimateDaysToFinish } from "@/lib/insights";
 import { getRepository } from "@/lib/repository";
 import type { Book, BookStatus, ReadingSession, UserBook } from "@/lib/types";
 
@@ -32,6 +37,15 @@ export default function BookDetailPage() {
   const [pageError, setPageError] = useState("");
   const [statusSheetOpen, setStatusSheetOpen] = useState(false);
   const [manualSheetOpen, setManualSheetOpen] = useState(false);
+  const [descExpanded, setDescExpanded] = useState(false);
+  const [daysToFinish, setDaysToFinish] = useState<number | null>(null);
+  // 세션 액션(수정/삭제)과 책 제거 확인 상태 (BACKLOG P0-B)
+  // Session action (edit/delete) and book-removal confirmation state (BACKLOG P0-B)
+  const [sessionAction, setSessionAction] = useState<ReadingSession | null>(null);
+  const [editTarget, setEditTarget] = useState<ReadingSession | null>(null);
+  const [deleteArmed, setDeleteArmed] = useState(false);
+  const [removeSheetOpen, setRemoveSheetOpen] = useState(false);
+  const [removeArmed, setRemoveArmed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -45,12 +59,32 @@ export default function BookDetailPage() {
           router.replace("/library");
           return;
         }
+
+        // 첫 페인트를 막지 않도록 메타 백필은 백그라운드로 돌리고, 성공 시에만 다시 그린다
+        // Backfill runs in the background so it never blocks first paint; redraw only on success
+        void enrichBookMeta(loadedBook.id).then((enriched) => {
+          if (enriched && !cancelled) {
+            setReloadKey((key) => key + 1);
+          }
+        });
         const loadedUserBook = await repository.getUserBook(params.bookId);
         const loadedSessions = await repository.listSessionsForBook(params.bookId);
         if (!cancelled) {
           setBook(loadedBook);
           setUserBook(loadedUserBook ?? null);
           setSessions(loadedSessions);
+          // 예상 완독일 — 읽는 중일 때만 최근 페이스 기반으로 계산 (스펙 §35)
+          // Days-to-finish estimate — recent-pace based, only while reading (spec §35)
+          setDaysToFinish(
+            loadedUserBook?.status === "reading"
+              ? estimateDaysToFinish(
+                  loadedSessions,
+                  loadedUserBook.currentPage,
+                  loadedBook.pageCount,
+                  Date.now(),
+                )
+              : null,
+          );
           setPageError("");
           setReady(true);
         }
@@ -79,6 +113,7 @@ export default function BookDetailPage() {
       if (status === "dnf" && dnfReason) {
         await repository.updateUserBook(book.id, { dnfReason });
       }
+      notifyLibraryChange();
       setStatusSheetOpen(false);
       setReloadKey((key) => key + 1);
     } catch (error) {
@@ -93,10 +128,44 @@ export default function BookDetailPage() {
     }
     try {
       await getRepository().updateUserBook(book.id, { rating });
+      notifyLibraryChange();
       setReloadKey((key) => key + 1);
     } catch (error) {
       console.error("[BookDetail] failed to save rating:", error);
       setPageError("별점을 저장하지 못했어요. 다시 시도해 주세요.");
+    }
+  }
+
+  async function handleDeleteSession(session: ReadingSession) {
+    try {
+      const repository = getRepository();
+      await repository.deleteSession(session.id);
+      // 삭제 후 남은 기록 기준으로 진행 상태를 재계산한다
+      // Recompute progress from remaining records after deletion
+      await recomputeBookProgress(session.bookId);
+      notifyLibraryChange();
+      setSessionAction(null);
+      setDeleteArmed(false);
+      setReloadKey((key) => key + 1);
+    } catch (error) {
+      console.error("[BookDetail] failed to delete session:", error);
+      setPageError("기록을 삭제하지 못했어요. 다시 시도해 주세요.");
+      setSessionAction(null);
+    }
+  }
+
+  async function handleRemoveBook() {
+    if (!book) {
+      return;
+    }
+    try {
+      await getRepository().removeBookCompletely(book.id);
+      notifyLibraryChange();
+      router.replace("/library");
+    } catch (error) {
+      console.error("[BookDetail] failed to remove book:", error);
+      setPageError("책을 제거하지 못했어요. 다시 시도해 주세요.");
+      setRemoveSheetOpen(false);
     }
   }
 
@@ -123,9 +192,8 @@ export default function BookDetailPage() {
     book.pageCount > 0 && userBook
       ? Math.min(100, Math.round((userBook.currentPage / book.pageCount) * 100))
       : null;
-
   return (
-    <main className="flex-1 px-5 pt-6 pb-36">
+    <main className="flex-1 px-5 pt-6 pb-20">
       <button
         type="button"
         aria-label="뒤로"
@@ -137,7 +205,10 @@ export default function BookDetailPage() {
 
       {pageError !== "" && <p className="mt-4 text-sm text-danger">{pageError}</p>}
 
-      <div className="mt-4 flex flex-col items-center text-center">
+      {/* 데스크톱: 좌측 책 정보+READ / 우측 기록·소개·타임라인 2단 배치 */}
+      {/* Desktop: two columns — book info + READ left, records/about/timeline right */}
+      <div className="lg:grid lg:grid-cols-[minmax(0,400px)_1fr] lg:items-start lg:gap-14">
+      <div className="mt-4 flex flex-col items-center text-center lg:sticky lg:top-16">
         <BookCover title={book.title} coverUrl={book.coverUrl} size="lg" />
         <h1 className="mt-5 text-xl font-bold tracking-tight break-keep">{book.title}</h1>
         {book.authors.length > 0 && (
@@ -146,7 +217,33 @@ export default function BookDetailPage() {
         <p className="mt-0.5 text-sm text-ink-tertiary">
           {book.publisher}
           {book.pageCount > 0 && ` · ${book.pageCount}쪽`}
+          {book.kakaoUrl !== "" && (
+            <>
+              {" · "}
+              <a
+                href={book.kakaoUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="cursor-pointer text-tint hover:underline active:opacity-70"
+              >
+                책 정보 ↗
+              </a>
+            </>
+          )}
         </p>
+
+        {book.categories && book.categories.length > 0 && (
+          <div className="mt-2 flex flex-wrap justify-center gap-1.5">
+            {book.categories.map((category) => (
+              <span
+                key={category}
+                className="rounded-full bg-fill px-2.5 py-1 text-xs font-medium text-ink-secondary"
+              >
+                {category}
+              </span>
+            ))}
+          </div>
+        )}
 
         {userBook && (
           <button
@@ -180,6 +277,11 @@ export default function BookDetailPage() {
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
+            {daysToFinish !== null && (
+              <p className="nums mt-2 text-sm text-ink-tertiary">
+                현재 속도라면 약 {daysToFinish}일 후 완독 예상
+              </p>
+            )}
           </div>
         )}
 
@@ -193,7 +295,8 @@ export default function BookDetailPage() {
         </motion.button>
       </div>
 
-      <div className="nums mt-8 grid grid-cols-3 divide-x divide-separator border-y border-separator py-4 text-center">
+      <div className="lg:mt-4">
+      <div className="nums mt-8 grid grid-cols-3 divide-x divide-separator border-y border-separator py-4 text-center lg:mt-0">
         <div>
           <p className="text-lg font-semibold">{formatDurationShort(totalSeconds)}</p>
           <p className="mt-0.5 text-xs text-ink-tertiary">총 독서 시간</p>
@@ -207,6 +310,28 @@ export default function BookDetailPage() {
           <p className="mt-0.5 text-xs text-ink-tertiary">읽은 페이지</p>
         </div>
       </div>
+
+      {book.description && book.description !== "" && (
+        <section className="mt-8" aria-label="책 소개">
+          <h2 className="text-xs font-semibold tracking-wide text-ink-tertiary uppercase">
+            About
+          </h2>
+          <p
+            className={`mt-2 text-[15px] leading-relaxed break-keep text-ink-secondary ${
+              descExpanded ? "" : "line-clamp-4"
+            }`}
+          >
+            {book.description}
+          </p>
+          <button
+            type="button"
+            onClick={() => setDescExpanded((expanded) => !expanded)}
+            className="mt-1.5 cursor-pointer text-sm font-medium text-tint active:opacity-70"
+          >
+            {descExpanded ? "접기" : "더보기"}
+          </button>
+        </section>
+      )}
 
       <section className="mt-8" aria-label="독서 타임라인">
         <div className="flex items-baseline justify-between">
@@ -223,9 +348,16 @@ export default function BookDetailPage() {
         </div>
 
         {sessions.length === 0 ? (
-          <p className="py-8 text-center text-sm text-ink-tertiary">
-            아직 기록이 없어요. READ로 시작해 보세요.
-          </p>
+          <div className="py-10 text-center">
+            <p className="text-[15px] font-medium text-ink-secondary">
+              아직 이 책의 기록이 없어요
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-ink-tertiary">
+              READ를 누르는 순간부터
+              <br />
+              여기에 이야기가 쌓여요
+            </p>
+          </div>
         ) : (
           <ul className="mt-2 divide-y divide-separator">
             {userBook?.startedAt !== null && userBook?.startedAt !== undefined && (
@@ -237,25 +369,36 @@ export default function BookDetailPage() {
               </li>
             )}
             {sessions.map((session) => (
-              <li key={session.id} className="py-3.5">
-                <div className="nums flex items-baseline justify-between text-sm">
-                  <span className="font-medium">
-                    {formatShortDate(session.startedAt)}
-                    <span className="ml-2 text-ink-secondary">
-                      {formatTimeOfDay(session.startedAt)} – {formatTimeOfDay(session.endedAt)}
+              <li key={session.id}>
+                {/* 행을 탭하면 수정/삭제 액션을 제공한다 (BACKLOG P0-B) */}
+                {/* Tapping a row offers edit/delete actions (BACKLOG P0-B) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeleteArmed(false);
+                    setSessionAction(session);
+                  }}
+                  className="-mx-2 w-[calc(100%+1rem)] cursor-pointer rounded-xl px-2 py-3.5 text-left transition-colors duration-150 hover:bg-fill/60 active:bg-fill"
+                >
+                  <div className="nums flex items-baseline justify-between text-sm">
+                    <span className="font-medium">
+                      {formatShortDate(session.startedAt)}
+                      <span className="ml-2 text-ink-secondary">
+                        {formatTimeOfDay(session.startedAt)} – {formatTimeOfDay(session.endedAt)}
+                      </span>
                     </span>
-                  </span>
-                  <span className="font-medium">
-                    {formatDurationShort(session.durationSeconds)}
-                  </span>
-                </div>
-                <div className="nums mt-0.5 flex items-baseline justify-between text-sm text-ink-secondary">
-                  <span>{formatPageRange(session.startPage, session.endPage)}</span>
-                  <span>{session.pagesRead} pages</span>
-                </div>
-                {session.memo !== "" && (
-                  <p className="mt-1.5 text-sm break-keep text-ink-secondary">{session.memo}</p>
-                )}
+                    <span className="font-medium">
+                      {formatDurationShort(session.durationSeconds)}
+                    </span>
+                  </div>
+                  <div className="nums mt-0.5 flex items-baseline justify-between text-sm text-ink-secondary">
+                    <span>{formatPageRange(session.startPage, session.endPage)}</span>
+                    <span>{session.pagesRead} pages</span>
+                  </div>
+                  {session.memo !== "" && (
+                    <p className="mt-1.5 text-sm break-keep text-ink-secondary">{session.memo}</p>
+                  )}
+                </button>
               </li>
             ))}
             {userBook?.status === "read" && userBook.finishedAt !== null && (
@@ -272,6 +415,21 @@ export default function BookDetailPage() {
           </ul>
         )}
       </section>
+      </div>
+      </div>
+
+      <div className="mt-12 text-center">
+        <button
+          type="button"
+          onClick={() => {
+            setRemoveArmed(false);
+            setRemoveSheetOpen(true);
+          }}
+          className="cursor-pointer py-1.5 text-sm font-medium text-ink-tertiary transition-colors duration-150 hover:text-danger active:opacity-70"
+        >
+          서재에서 제거
+        </button>
+      </div>
 
       {userBook && (
         <StatusSheet
@@ -288,6 +446,102 @@ export default function BookDetailPage() {
         onSaved={() => setReloadKey((key) => key + 1)}
         fixedBookId={book.id}
       />
+
+      {/* 세션 수정 — 기존 기록을 프리필한 수동 기록 시트 재사용 */}
+      {/* Session edit — reuses the manual sheet prefilled with the record */}
+      <ManualSessionSheet
+        open={editTarget !== null}
+        onClose={() => setEditTarget(null)}
+        onSaved={() => setReloadKey((key) => key + 1)}
+        editSession={editTarget ?? undefined}
+      />
+
+      <BottomSheet open={sessionAction !== null} onClose={() => setSessionAction(null)}>
+        {sessionAction && (
+          <div className="px-2">
+            <h2 className="px-1 pt-2 text-lg font-semibold tracking-tight">
+              이 기록을 어떻게 할까요?
+            </h2>
+            <p className="nums mt-1 px-1 text-sm text-ink-secondary">
+              {formatShortDate(sessionAction.startedAt)}{" "}
+              {formatTimeOfDay(sessionAction.startedAt)} –{" "}
+              {formatTimeOfDay(sessionAction.endedAt)} ·{" "}
+              {formatPageRange(sessionAction.startPage, sessionAction.endPage)}
+            </p>
+            <div className="mt-5 flex flex-col gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditTarget(sessionAction);
+                  setSessionAction(null);
+                }}
+                className="w-full cursor-pointer rounded-2xl bg-accent py-3.5 text-[15px] font-semibold text-accent-ink"
+              >
+                수정하기
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (deleteArmed) {
+                    void handleDeleteSession(sessionAction);
+                  } else {
+                    setDeleteArmed(true);
+                  }
+                }}
+                className={`w-full cursor-pointer rounded-2xl bg-fill py-3.5 text-[15px] font-semibold transition-colors duration-150 ${
+                  deleteArmed ? "text-danger" : "text-ink-secondary"
+                }`}
+              >
+                {deleteArmed ? "한 번 더 누르면 삭제돼요" : "삭제하기"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSessionAction(null)}
+                className="w-full cursor-pointer py-2 text-sm font-medium text-ink-tertiary"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        )}
+      </BottomSheet>
+
+      <BottomSheet open={removeSheetOpen} onClose={() => setRemoveSheetOpen(false)}>
+        <div className="px-2 pt-2 text-center">
+          <h2 className="text-lg font-semibold tracking-tight">
+            이 책을 서재에서 제거할까요?
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
+            독서 기록 {sessions.length}개도 함께 삭제되고
+            <br />
+            되돌릴 수 없어요
+          </p>
+          <div className="mt-6 flex flex-col gap-2.5">
+            <button
+              type="button"
+              onClick={() => {
+                if (removeArmed) {
+                  void handleRemoveBook();
+                } else {
+                  setRemoveArmed(true);
+                }
+              }}
+              className={`w-full cursor-pointer rounded-2xl py-3.5 text-[15px] font-semibold transition-colors duration-150 ${
+                removeArmed ? "bg-danger text-white" : "bg-fill text-danger"
+              }`}
+            >
+              {removeArmed ? "한 번 더 누르면 제거돼요" : "제거하기"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setRemoveSheetOpen(false)}
+              className="w-full cursor-pointer py-2 text-sm font-medium text-ink-tertiary"
+            >
+              취소
+            </button>
+          </div>
+        </div>
+      </BottomSheet>
     </main>
   );
 }

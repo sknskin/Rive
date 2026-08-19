@@ -56,6 +56,16 @@ export class DexieRepository implements ReadingRepository {
     return this.db.books.get(bookId);
   }
 
+  async updateBookMeta(
+    bookId: string,
+    patch: Partial<Pick<Book, "pageCount" | "description" | "categories" | "enrichedAt">>,
+  ): Promise<void> {
+    const updated = await this.db.books.update(bookId, patch);
+    if (updated === 0) {
+      throw new Error(`book not found: ${bookId}`);
+    }
+  }
+
   async getUserBook(bookId: string): Promise<UserBook | undefined> {
     return this.db.userBooks.get(bookId);
   }
@@ -125,6 +135,34 @@ export class DexieRepository implements ReadingRepository {
     return created;
   }
 
+  async updateSession(
+    id: string,
+    patch: Partial<Omit<ReadingSession, "id" | "bookId" | "createdAt">>,
+  ): Promise<void> {
+    const updated = await this.db.readingSessions.update(id, patch);
+    if (updated === 0) {
+      throw new Error(`session not found: ${id}`);
+    }
+  }
+
+  async deleteSession(id: string): Promise<void> {
+    await this.db.readingSessions.delete(id);
+  }
+
+  async removeBookCompletely(bookId: string): Promise<void> {
+    // 책 제거 시 연관 세션·서재 상태를 함께 지워 고아 레코드를 남기지 않는다
+    // Removing a book also deletes its sessions and shelf entry — no orphans
+    await this.db.transaction(
+      "rw",
+      [this.db.books, this.db.userBooks, this.db.readingSessions],
+      async () => {
+        await this.db.readingSessions.where("bookId").equals(bookId).delete();
+        await this.db.userBooks.delete(bookId);
+        await this.db.books.delete(bookId);
+      },
+    );
+  }
+
   async listSessionsByDateRange(startMs: number, endMs: number): Promise<ReadingSession[]> {
     const items = await this.db.readingSessions
       .where("startedAt")
@@ -141,16 +179,6 @@ export class DexieRepository implements ReadingRepository {
   async listAllSessions(): Promise<ReadingSession[]> {
     const items = await this.db.readingSessions.toArray();
     return items.sort((a, b) => a.startedAt - b.startedAt);
-  }
-
-  async getLastSessionForBook(bookId: string): Promise<ReadingSession | undefined> {
-    const items = await this.db.readingSessions.where("bookId").equals(bookId).toArray();
-    if (items.length === 0) {
-      return undefined;
-    }
-    return items.reduce((latest, current) =>
-      current.endedAt > latest.endedAt ? current : latest,
-    );
   }
 
   async getActiveSession(): Promise<ActiveSession | undefined> {

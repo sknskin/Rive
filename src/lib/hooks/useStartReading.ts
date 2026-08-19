@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { DEFAULT_START_PAGE } from "@/lib/constants";
+import { enrichBookMeta } from "@/lib/enrichBook";
+import { hapticTap } from "@/lib/haptics";
 import { getRepository } from "@/lib/repository";
 import type { BookSearchResult } from "@/lib/types";
 
@@ -19,6 +21,7 @@ export function useStartReading() {
       await repository.setBookStatus(bookId, "reading");
     }
     await repository.startActiveSession(bookId, startPage, Date.now());
+    hapticTap();
     router.push("/read");
   }
 
@@ -31,7 +34,11 @@ export function useStartReading() {
     // A new book picked from search is auto-registered and marked Reading (spec §5)
     const book = await repository.upsertBookByIsbn(result);
     await repository.setBookStatus(book.id, "reading");
+    // 부족한 메타(페이지 수/장르)는 백그라운드로 보강 — 독서 시작을 막지 않는다
+    // Enrich missing metadata (pages/genres) in the background without blocking
+    void enrichBookMeta(book.id);
     await repository.startActiveSession(book.id, startPage, Date.now());
+    hapticTap();
     router.push("/read");
   }
 
