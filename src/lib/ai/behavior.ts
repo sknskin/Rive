@@ -40,12 +40,24 @@ export async function collectBehaviorSnapshot(): Promise<BehaviorSnapshot> {
   const peak = peakHourWindow(hourHistogram(sessions));
   const totalSeconds = sessions.reduce((sum, session) => sum + session.durationSeconds, 0);
 
+  // 추천 피드백을 학습 신호로 전달한다 (스펙 §50)
+  // Forward recommendation feedback as learning signals (spec §50)
+  const recommendations = await repository.listRecommendations();
+  const likedBooks = recommendations
+    .filter((item) => item.status === "liked")
+    .map((item) => item.book.title);
+  const notInterested = recommendations
+    .filter((item) => item.status === "notInterested")
+    .map((item) => ({ title: item.book.title, reason: item.feedbackReason ?? "" }));
+
   return {
     books,
     totalSessions: sessions.length,
     totalMinutes: Math.round(totalSeconds / SECONDS_PER_MINUTE),
     readingSpeedPagesPerHour: readingSpeedPagesPerHour(sessions),
     peakHours: peak ? `${formatHour(peak.startHour)}-${formatHour(peak.endHour)}` : null,
+    likedBooks,
+    notInterested,
   };
 }
 
@@ -63,6 +75,8 @@ export function toPreferencePayload(profile: PreferenceProfile): PreferencePaylo
     })),
     fictionPreference: profile.fictionPreference,
     readingPurposes: profile.readingPurposes,
+    ...(profile.ageRange ? { ageRange: profile.ageRange } : {}),
+    ...(profile.gender ? { gender: profile.gender } : {}),
   };
 }
 

@@ -32,8 +32,16 @@ interface QueriesResponse {
 }
 
 interface RankResponse {
-  items: { index: number; matchPercent: number; reason: string }[];
+  items: { index: number; matchPercent: number; reason: string; category: string }[];
 }
+
+const RECOMMEND_CATEGORIES = [
+  "For You",
+  "Because You Loved",
+  "Something Different",
+  "Quick Read",
+];
+const DEFAULT_CATEGORY = "For You";
 
 async function searchBooks(query: string): Promise<BookSearchResult[]> {
   const kakaoKey = process.env.KAKAO_REST_API_KEY;
@@ -136,6 +144,11 @@ export async function POST(request: Request) {
           Math.max(MATCH_PERCENT_MIN, Math.round(entry.matchPercent)),
         ),
         reason: entry.reason,
+        // 정의된 카테고리 외 값은 기본 카테고리로 정규화한다
+        // Normalize out-of-list categories to the default
+        category: RECOMMEND_CATEGORIES.includes(entry.category)
+          ? entry.category
+          : DEFAULT_CATEGORY,
       });
       if (items.length >= RECOMMENDATION_COUNT) {
         break;
