@@ -1,9 +1,27 @@
 # Rive 배포 준비 (Vercel Hobby — 무료)
 
-상태: **배포 완료 (2026-08-19)** — https://rive-ochre.vercel.app (Vercel Hobby,
-워크스페이스 sknskin-7775). 원격 검증: 홈/manifest/아이콘 200, 카카오 검색 정상,
-AI 라우트 무인증 401 차단.
-전제: Supabase 전환 1차 완료(스키마·RLS·인증 게이트·이관 E2E 통과).
+상태: **운영 배포 (2026-08-19)** — https://rive-ochre.vercel.app (Vercel Hobby,
+워크스페이스 sknskin-7775). `main` push 시 Vercel production이 자동 재배포된다.
+
+사전 검증: `npm run verify` + `CI=1 npm run test:e2e`. DB migration은 Vercel이 적용하지
+않으므로 배포와 별도로 실행한다.
+
+## 현재 DB migration
+
+다음 순서로 `supabase/migrations` SQL을 적용한다.
+
+1. `20260819000000_init.sql`
+2. `20260819010000_realtime_quota.sql`
+3. `20260819020000_atomic_import.sql`
+4. `20260819030000_atomic_reading_sessions.sql`
+
+마지막 migration은 세션 저장·수정·삭제와 책 진행률·활성 타이머를 한 transaction으로
+묶고, 동일 책 변경을 row lock으로 직렬화한다. PostgreSQL 17에서 멱등 재시도,
+수정·삭제 재계산, 잠금 대기, 새 활성 타이머 보존을 검증했다.
+
+운영 DB에 4번이 아직 없으면 앱은 `PGRST202`에만 재시도 수렴형 호환 경로를
+사용하고 경고를 남긴다. 이 경로는 중복을 막지만 여러 REST 요청이므로 서버 원자적이지
+않다. 운영에서 4번을 적용·확인한 후 호환 경로 제거를 별도 commit으로 진행한다.
 
 ## 배포 절차 (실행 시)
 
@@ -27,11 +45,14 @@ AI 라우트 무인증 401 차단.
 6. Google 로그인을 쓰려면 Google Cloud Console의 OAuth 클라이언트
    **승인된 리디렉션 URI**에 `https://brsjafeidrsouqbwiyef.supabase.co/auth/v1/callback`이
    등록돼 있어야 함 (로컬/배포 공통 — Supabase가 중간 콜백을 받음)
-7. 배포 후 확인 체크리스트:
+7. GitHub Actions `CI` 성공과 Vercel deployment `success`를 확인
+8. 배포 후 확인 체크리스트:
    - [ ] 비로그인: 책 검색·READ·기록(로컬 모드) 동작
    - [ ] 회원가입/로그인 → 서버 모드 전환, 이관 프롬프트
    - [ ] 비로그인 AI 호출이 401 안내로 차단되는지
    - [ ] 라이트/다크 모드, 모바일 뷰포트
+   - [ ] 보안 헤더(`nosniff`, `DENY`, Referrer/Permissions Policy)
+   - [ ] 도서 검색 API의 CDN cache header
 
 ## 주의사항
 

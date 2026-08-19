@@ -1,6 +1,7 @@
 import type { AiErrorResponse } from "@/lib/ai/contracts";
 import { generateJson, type GeminiSchema } from "@/lib/ai/gemini";
 import { consumeDailyAiQuota, getUserFromRequest } from "@/lib/supabase/serverAuth";
+import { isWrappedStats, readJsonBody } from "../requestValidation";
 
 const STATUS_BAD_REQUEST = 400;
 const STATUS_UNAUTHORIZED = 401;
@@ -11,6 +12,7 @@ const STATUS_BAD_GATEWAY = 502;
 // String cap for prompt inputs — blocks arbitrary JSON injection (audit 6 B1)
 const MAX_LABEL_CHARS = 40;
 const MAX_NAME_CHARS = 80;
+const MAX_BODY_CHARS = 20_000;
 
 const SUMMARY_SCHEMA: GeminiSchema = {
   type: "OBJECT",
@@ -57,28 +59,22 @@ export async function POST(request: Request) {
     );
   }
 
-  // 일일 사용량 상한 — 초과 시 429 (rate limit 1차)
-  // Daily usage cap — 429 when exceeded (first-stage rate limit)
-  if (!(await consumeDailyAiQuota(authed.token))) {
-    return Response.json(
-      { error: "오늘의 AI 사용량을 모두 썼어요. 내일 다시 이용해 주세요." } satisfies AiErrorResponse,
-      { status: STATUS_TOO_MANY_REQUESTS },
-    );
-  }
-
   let stats: WrappedStatsPayload;
   try {
-    const raw = (await request.json()) as Partial<WrappedStatsPayload>;
+    const value = await readJsonBody(request, MAX_BODY_CHARS);
+    if (!isWrappedStats(value)) {
+      throw new Error("invalid wrapped payload");
+    }
     // 알려진 필드만 화이트리스트로 복사한다 — 임의 키가 프롬프트에 들어가지 않게 (6차 B1)
     // Whitelist known fields so arbitrary keys never reach the prompt (audit 6 B1)
     stats = {
-      label: String(raw.label ?? "").slice(0, MAX_LABEL_CHARS),
-      totalSeconds: Number(raw.totalSeconds) || 0,
-      totalPages: Number(raw.totalPages) || 0,
-      readingDays: Number(raw.readingDays) || 0,
-      finishedBooks: Number(raw.finishedBooks) || 0,
-      topAuthor: raw.topAuthor ? String(raw.topAuthor).slice(0, MAX_NAME_CHARS) : null,
-      topGenre: raw.topGenre ? String(raw.topGenre).slice(0, MAX_NAME_CHARS) : null,
+      label: value.label.slice(0, MAX_LABEL_CHARS),
+      totalSeconds: value.totalSeconds,
+      totalPages: value.totalPages,
+      readingDays: value.readingDays,
+      finishedBooks: value.finishedBooks,
+      topAuthor: typeof value.topAuthor === "string" ? value.topAuthor.slice(0, MAX_NAME_CHARS) : null,
+      topGenre: typeof value.topGenre === "string" ? value.topGenre.slice(0, MAX_NAME_CHARS) : null,
     };
     if (stats.label === "") {
       throw new Error("label required");
@@ -87,6 +83,13 @@ export async function POST(request: Request) {
     return Response.json(
       { error: "잘못된 요청이에요." } satisfies AiErrorResponse,
       { status: STATUS_BAD_REQUEST },
+    );
+  }
+
+  if (!(await consumeDailyAiQuota(authed.token))) {
+    return Response.json(
+      { error: "오늘의 AI 사용량을 모두 썼어요. 내일 다시 이용해 주세요." } satisfies AiErrorResponse,
+      { status: STATUS_TOO_MANY_REQUESTS },
     );
   }
 

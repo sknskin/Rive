@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
@@ -25,6 +25,8 @@ const NAV_ITEMS: NavItem[] = [
 
 const ICON_STROKE_WIDTH = 1.7;
 const DRAWER_SPRING = { type: "spring", stiffness: 400, damping: 38 } as const;
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 function iconProps(active: boolean) {
   return {
@@ -112,6 +114,65 @@ export default function TabBar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const drawerRef = useRef<HTMLElement>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) {
+      return;
+    }
+
+    const menuTrigger = menuTriggerRef.current;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+        return;
+      }
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const drawer = drawerRef.current;
+      if (!drawer) {
+        return;
+      }
+      const focusables = drawer.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+      if (focusables.length === 0) {
+        event.preventDefault();
+        drawer.focus();
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (!drawer.contains(active)) {
+        event.preventDefault();
+        first.focus();
+      } else if (event.shiftKey && (active === first || active === drawer)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    const focusTimer = setTimeout(() => {
+      const drawer = drawerRef.current;
+      drawer?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)?.focus();
+    }, 0);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      clearTimeout(focusTimer);
+      document.body.style.overflow = previousOverflow;
+      menuTrigger?.focus();
+    };
+  }, [menuOpen]);
 
   // Reading Mode는 몰입 화면이므로 내비게이션을 숨긴다
   // Reading Mode is immersive, so hide navigation there
@@ -172,9 +233,11 @@ export default function TabBar() {
       <header className="fixed inset-x-0 top-0 z-40 border-b border-separator bg-elevated/80 backdrop-blur-xl md:hidden">
         <div className="flex h-12 items-center gap-1 px-2">
           <button
+            ref={menuTriggerRef}
             type="button"
             aria-label="메뉴 열기"
             aria-expanded={menuOpen}
+            aria-controls="mobile-navigation-drawer"
             onClick={() => setMenuOpen(true)}
             className="flex size-10 cursor-pointer items-center justify-center rounded-full text-ink transition-colors duration-200 active:bg-fill"
           >
@@ -217,9 +280,12 @@ export default function TabBar() {
               onClick={() => setMenuOpen(false)}
             />
             <motion.aside
+              ref={drawerRef}
+              id="mobile-navigation-drawer"
               role="dialog"
               aria-modal="true"
               aria-label="메뉴"
+              tabIndex={-1}
               className="pb-safe-4 absolute inset-y-0 left-0 flex w-72 max-w-[80%] flex-col bg-elevated px-3 pt-5 shadow-2xl"
               initial={{ x: "-100%" }}
               animate={{ x: 0 }}

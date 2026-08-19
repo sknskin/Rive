@@ -109,21 +109,25 @@ export default function BookSearch({ onSelect }: BookSearchProps) {
       setError("");
       setLoading(false);
     } else {
+      setError("");
       setLoading(true);
     }
   }
 
   useEffect(() => {
+    const seq = ++requestSeq.current;
     const trimmed = query.trim();
     if (trimmed === "") {
       return;
     }
 
-    const seq = ++requestSeq.current;
+    const controller = new AbortController();
 
     const timer = setTimeout(async () => {
       try {
-        const response = await fetch(`/api/books/search?q=${encodeURIComponent(trimmed)}`);
+        const response = await fetch(`/api/books/search?q=${encodeURIComponent(trimmed)}`, {
+          signal: controller.signal,
+        });
         if (!response.ok) {
           throw new Error(`search failed: ${response.status}`);
         }
@@ -136,6 +140,9 @@ export default function BookSearch({ onSelect }: BookSearchProps) {
           setError("");
         }
       } catch (searchError) {
+        if (controller.signal.aborted) {
+          return;
+        }
         console.error("[BookSearch] search failed:", searchError);
         if (seq === requestSeq.current) {
           setResults([]);
@@ -148,7 +155,10 @@ export default function BookSearch({ onSelect }: BookSearchProps) {
       }
     }, SEARCH_DEBOUNCE_MS);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [query]);
 
   return (
@@ -195,12 +205,20 @@ export default function BookSearch({ onSelect }: BookSearchProps) {
 
       <div className="mt-3 min-h-48">
         {error !== "" && (
-          <p className="px-2 py-8 text-center text-sm text-ink-secondary">{error}</p>
+          <p role="alert" className="px-2 py-8 text-center text-sm text-ink-secondary">
+            {error}
+          </p>
         )}
 
         {error === "" && !loading && query.trim() !== "" && results.length === 0 && (
-          <p className="px-2 py-8 text-center text-sm text-ink-secondary">
+          <p role="status" className="px-2 py-8 text-center text-sm text-ink-secondary">
             검색 결과가 없어요.
+          </p>
+        )}
+
+        {results.length > 0 && (
+          <p role="status" className="sr-only">
+            검색 결과 {results.length}개
           </p>
         )}
 
@@ -227,7 +245,9 @@ export default function BookSearch({ onSelect }: BookSearchProps) {
         </ul>
 
         {loading && results.length === 0 && (
-          <p className="px-2 py-8 text-center text-sm text-ink-tertiary">검색 중…</p>
+          <p role="status" className="px-2 py-8 text-center text-sm text-ink-tertiary">
+            검색 중…
+          </p>
         )}
 
         {results.length > 0 && source !== null && (

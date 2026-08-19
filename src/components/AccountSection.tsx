@@ -199,7 +199,11 @@ export default function AccountSection() {
     "w-full rounded-xl bg-fill px-3.5 py-2.5 text-[15px] outline-none placeholder:text-ink-tertiary focus:ring-2 focus:ring-tint";
 
   if (view === "loading") {
-    return <p className="mt-2 px-1 text-sm text-ink-tertiary">계정 확인 중…</p>;
+    return (
+      <p role="status" className="mt-2 px-1 text-sm text-ink-tertiary">
+        계정 확인 중…
+      </p>
+    );
   }
 
   if (view === "migratePrompt") {
@@ -211,7 +215,11 @@ export default function AccountSection() {
           <br />
           기기의 기록은 지워지지 않아요.
         </p>
-        {errorText !== "" && <p className="mt-2 text-sm text-danger">{errorText}</p>}
+        {errorText !== "" && (
+          <p role="alert" className="mt-2 text-sm text-danger">
+            {errorText}
+          </p>
+        )}
         <button
           type="button"
           disabled={busy}
@@ -271,8 +279,16 @@ export default function AccountSection() {
             {busy ? "옮기는 중…" : "이 기기의 기록을 계정으로 옮기기"}
           </button>
         )}
-        {message !== "" && <p className="mt-2 px-1 text-sm text-tint">{message}</p>}
-        {errorText !== "" && <p className="mt-2 px-1 text-sm text-danger">{errorText}</p>}
+        {message !== "" && (
+          <p role="status" className="mt-2 px-1 text-sm text-tint">
+            {message}
+          </p>
+        )}
+        {errorText !== "" && (
+          <p role="alert" className="mt-2 px-1 text-sm text-danger">
+            {errorText}
+          </p>
+        )}
       </div>
     );
   }
@@ -318,8 +334,16 @@ export default function AccountSection() {
           className={inputClass}
         />
       </div>
-      {message !== "" && <p className="mt-1.5 px-1 text-sm text-tint">{message}</p>}
-      {errorText !== "" && <p className="mt-1.5 px-1 text-sm text-danger">{errorText}</p>}
+      {message !== "" && (
+        <p role="status" className="mt-1.5 px-1 text-sm text-tint">
+          {message}
+        </p>
+      )}
+      {errorText !== "" && (
+        <p role="alert" className="mt-1.5 px-1 text-sm text-danger">
+          {errorText}
+        </p>
+      )}
       {/* 주 버튼과 모드 토글을 한 행에 — 세로 공간 절약 */}
       {/* Primary action and mode toggle share one row — saves height */}
       <div className="mt-2 flex items-center gap-2">

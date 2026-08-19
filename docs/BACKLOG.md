@@ -1,7 +1,7 @@
 # Rive 백로그
 
-최종 갱신: 2026-08-19 (리서치 기능 2차: 인용구 사진 OCR·ISBN 바코드 스캔·Library 필터 + 컴포넌트 테스트 도입)
-근거: 코드베이스 전수조사 4회(라우트/컴포넌트/데이터 모델/하이진 스캔/데드코드 스윕) + 제품 스펙 대조.
+최종 갱신: 2026-08-19 (8차 품질 전수조사·원자 저장·접근성·CI/E2E 하드닝)
+근거: 소스·화면·데이터 계약·API·접근성·성능·배포 경계를 다중 전수조사하고 실패 주입·실제 브라우저·PostgreSQL 17로 검증.
 모든 항목은 코드에서 확인된 사실 기반이며, 항목마다 스펙 참조(§)와 근거를 병기한다.
 
 ## 현재 상태 요약
@@ -42,8 +42,9 @@
   사용자 지시로 제거. 주요 CTA 2계층 통일 — 히어로급(py-4·18px·tracking-wide·shadow·hover):
   Today/Book Detail READ, Discover 3종, 핵심 루프 확정 버튼 4종(읽기 시작/저장 2곳/온보딩
   다음), 시트 확인급(py-3.5·15px)은 기존 유지.
-- 페이지 7개, API 라우트 5개(books/search·books/enrich·ai/profile·ai/recommend·ai/wrapped),
-  컴포넌트 31개(AuthSync·AccountSection 포함). 단위 테스트 62개 통과 (6차 전수조사 실측).
+- 페이지 7개, API 라우트 6개(books 2·AI 4). 8차 최종 검증: Vitest
+  22파일/132건 통과, coverage statements 28.55%·branches 25.45%·functions 23.08%·lines
+  28.86%, Chromium 데스크톱·모바일 E2E 4건 통과, lint·typecheck·production build 통과.
 - 코드 하이진: TODO/FIXME/`any`/빈 catch/ts-ignore 0건 (3차 전수조사 재확인.
   유일 예외: theme.ts의 FOUC 방지 인라인 스크립트 문자열 내부 빈 catch — 무해).
 - 설계 부합성 (2026-08-19 3차 조사): 스펙 핵심 원칙 14항목 전부 충족 판정 —
@@ -531,3 +532,36 @@ WAF) + 외부 콘솔(Kakao OAuth) + 대형(북클럽·Advanced Insights·공유 
   Redirect URLs — Google 로그인/메일 링크용, 사용자 진행).
 - 배포로 풀린 후속 과제: 독서 리마인더(웹 푸시), D8 쿼터 환불(service key 등록 시),
   WAF rate limit(남용 관측 시).
+
+---
+
+## 8차 품질 전수조사 및 하드닝 (2026-08-19)
+
+### 완료·검증
+
+- **독서 세션 정합성**: 저장·수정·삭제와 진행률·상태·활성 타이머를 Dexie
+  transaction/Supabase RPC로 묶음. 호출자 UUID 재사용, same-id 정정 재계산,
+  책 소속 충돌 차단, `FOR UPDATE` 책 단위 직렬화, 활성 타이머 compare-delete 적용.
+- **실패 주입**: fake-indexeddb로 롤백·재시도·정정·삭제, PostgreSQL 17에서
+  migration·멱등성·잠금 대기·새 활성 타이머 보존을 실측.
+- **백업·복원**: 필수 필드·범위·열거·FK 전체 사전 검증, 로컬 단일 transaction,
+  서버 기존 책 ID 재매핑 및 unknown reference 전체 중단.
+- **API·보안**: AI 4개 route runtime schema를 쿼터 차감 전에 검증. 인증 401·쿼터
+  429·Gemini 502 계약 테스트, 외부 도서 API 8초 timeout·200자 상한·CDN cache,
+  `nosniff`·frame/referrer/permissions 헤더 적용.
+- **접근성·비동기**: drawer 포커스 트랩·Escape·복귀·스크롤 잠금, 입력 이름,
+  live region/alert, reduced-motion CSS·MotionConfig, 검색 stale/abort, BroadcastChannel cleanup,
+  Calendar batch lookup 검증.
+- **자동 게이트**: coverage-v8, GitHub Actions CI, Chromium 데스크톱·모바일 E2E.
+  최종 실측은 Vitest 22파일/132건, coverage 28.55/25.45/23.08/28.86%, Playwright 4건 통과.
+
+### 외부 권한·제품 결정이 필요한 잔여
+
+- **운영 Supabase migration**: `20260819030000_atomic_reading_sessions.sql`이 아직 운영
+  schema cache에 없음(`PGRST202` 실측). DB/dashboard 인증이 없어 현재 세션에서 적용
+  불가. 적용 전 계정 모드는 재시도 수렴형 호환 경로를 사용하므로 **서버 원자성은
+  아직 완료로 간주하지 않는다**.
+- **비밀/인프라**: AI 실패 시 쿼터 환불(service-role 보호 설계), Vercel WAF/rate limit,
+  Kakao OAuth, 실기기 바코드·카메라 검증.
+- **제품 정책/대형 기능**: 재독 주기, 리마인더, 계정 삭제·비밀번호 재설정·개인정보
+  문구, strict nonce CSP, 북클럽·버디 리드, 공유 카탈로그, Advanced Insights.

@@ -15,7 +15,8 @@ import type {
 } from "@/lib/types";
 import { ACTIVE_SESSION_ID, AI_PROFILE_ID, PREFERENCE_PROFILE_ID } from "@/lib/constants";
 import { getDb } from "@/lib/db";
-import type { ReadingRepository } from "./types";
+import { deriveBookProgress } from "@/lib/bookProgress";
+import type { AtomicSessionWrite, ReadingRepository } from "./types";
 
 // Dexie 기반 저장소 구현 — 브라우저 IndexedDB에 기록한다
 // Dexie-backed repository — persists to browser IndexedDB
@@ -141,28 +142,93 @@ export class DexieRepository implements ReadingRepository {
     }
   }
 
-  async addSession(session: Omit<ReadingSession, "id" | "createdAt">): Promise<ReadingSession> {
-    const created: ReadingSession = {
-      ...session,
-      id: crypto.randomUUID(),
-      createdAt: Date.now(),
-    };
-    await this.db.readingSessions.add(created);
-    return created;
+  async saveSessionAtomic(input: AtomicSessionWrite): Promise<ReadingSession> {
+    const { session } = input;
+    await this.db.transaction(
+      "rw",
+      [this.db.readingSessions, this.db.userBooks, this.db.activeSession],
+      async () => {
+        const existingSession = await this.db.readingSessions.get(session.id);
+        if (existingSession && existingSession.bookId !== session.bookId) {
+          throw new Error(`session id collision: ${session.id}`);
+        }
+        // A retry may carry corrected form values; replace the same-id row so row and progress stay aligned.
+        await this.db.readingSessions.put(session);
+
+        const userBook = await this.db.userBooks.get(session.bookId);
+        if (!userBook) {
+          throw new Error(`userBook not found: ${session.bookId}`);
+        }
+
+        const shouldUpdateProgress =
+          input.progressMode === "always" || session.endedAt >= userBook.lastReadAt;
+        const patch: Partial<UserBook> = {};
+        if (existingSession) {
+          const sessions = await this.db.readingSessions
+            .where("bookId")
+            .equals(session.bookId)
+            .toArray();
+          Object.assign(patch, deriveBookProgress(userBook, sessions));
+        } else if (shouldUpdateProgress) {
+          patch.currentPage = session.endPage;
+          patch.lastReadAt = session.endedAt;
+        }
+        if (input.markAsRead) {
+          patch.status = "read";
+          patch.finishedAt = session.endedAt;
+        }
+        if (Object.keys(patch).length > 0) {
+          await this.db.userBooks.update(session.bookId, patch);
+        }
+        if (input.clearActiveSession) {
+          const active = await this.db.activeSession.get(ACTIVE_SESSION_ID);
+          if (
+            active?.bookId === session.bookId &&
+            active.startedAt === session.startedAt &&
+            active.startPage === session.startPage
+          ) {
+            await this.db.activeSession.delete(ACTIVE_SESSION_ID);
+          }
+        }
+      },
+    );
+    return session;
   }
 
-  async updateSession(
+  async updateSessionAndRecompute(
     id: string,
+    bookId: string,
     patch: Partial<Omit<ReadingSession, "id" | "bookId" | "createdAt">>,
   ): Promise<void> {
-    const updated = await this.db.readingSessions.update(id, patch);
-    if (updated === 0) {
-      throw new Error(`session not found: ${id}`);
-    }
+    await this.db.transaction("rw", [this.db.readingSessions, this.db.userBooks], async () => {
+      const existing = await this.db.readingSessions.get(id);
+      if (!existing || existing.bookId !== bookId) {
+        throw new Error(`session not found: ${id}`);
+      }
+      await this.db.readingSessions.update(id, patch);
+      const userBook = await this.db.userBooks.get(bookId);
+      if (!userBook) {
+        throw new Error(`userBook not found: ${bookId}`);
+      }
+      const sessions = await this.db.readingSessions.where("bookId").equals(bookId).toArray();
+      await this.db.userBooks.update(bookId, deriveBookProgress(userBook, sessions));
+    });
   }
 
-  async deleteSession(id: string): Promise<void> {
-    await this.db.readingSessions.delete(id);
+  async deleteSessionAndRecompute(id: string, bookId: string): Promise<void> {
+    await this.db.transaction("rw", [this.db.readingSessions, this.db.userBooks], async () => {
+      const existing = await this.db.readingSessions.get(id);
+      if (existing && existing.bookId !== bookId) {
+        throw new Error(`session does not belong to book: ${id}`);
+      }
+      await this.db.readingSessions.delete(id);
+      const userBook = await this.db.userBooks.get(bookId);
+      if (!userBook) {
+        throw new Error(`userBook not found: ${bookId}`);
+      }
+      const sessions = await this.db.readingSessions.where("bookId").equals(bookId).toArray();
+      await this.db.userBooks.update(bookId, deriveBookProgress(userBook, sessions));
+    });
   }
 
   async removeBookCompletely(bookId: string): Promise<void> {

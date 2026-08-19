@@ -150,7 +150,16 @@ export default function AuthSync() {
             handleChange,
           );
         }
-        channel.subscribe();
+        channel.subscribe((status, error) => {
+          if (cancelled || status === "SUBSCRIBED") {
+            return;
+          }
+          if (error) {
+            console.error(`[AuthSync] realtime ${status.toLowerCase()}:`, error);
+          } else {
+            console.error(`[AuthSync] realtime subscription status: ${status}`);
+          }
+        });
       } catch (error) {
         console.error("[AuthSync] realtime subscribe failed:", error);
       }

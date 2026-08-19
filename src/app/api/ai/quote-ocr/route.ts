@@ -1,6 +1,7 @@
 import type { AiErrorResponse } from "@/lib/ai/contracts";
 import { generateJsonFromImage, type GeminiSchema } from "@/lib/ai/gemini";
 import { consumeDailyAiQuota, getUserFromRequest } from "@/lib/supabase/serverAuth";
+import { isRecord, readJsonBody } from "../requestValidation";
 
 const STATUS_BAD_REQUEST = 400;
 const STATUS_UNAUTHORIZED = 401;
@@ -11,6 +12,7 @@ const STATUS_BAD_GATEWAY = 502;
 // 이미지 base64 상한 — 클라이언트가 1024px/JPEG로 압축해 보내므로 넉넉한 방어선 (비용 어뷰징 방지)
 // Base64 image cap — the client sends compressed 1024px JPEG, this is a generous guard
 const MAX_IMAGE_BASE64_CHARS = 2_000_000;
+const MAX_BODY_CHARS = MAX_IMAGE_BASE64_CHARS + 1_000;
 const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 const OCR_SCHEMA: GeminiSchema = {
@@ -48,16 +50,13 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!(await consumeDailyAiQuota(authed.token))) {
-    return Response.json(
-      { error: "오늘의 AI 사용량을 모두 썼어요. 내일 다시 이용해 주세요." } satisfies AiErrorResponse,
-      { status: STATUS_TOO_MANY_REQUESTS },
-    );
-  }
-
   let payload: QuoteOcrPayload;
   try {
-    payload = (await request.json()) as QuoteOcrPayload;
+    const raw = await readJsonBody(request, MAX_BODY_CHARS);
+    if (!isRecord(raw)) {
+      throw new Error("invalid OCR payload");
+    }
+    payload = raw as unknown as QuoteOcrPayload;
   } catch {
     return Response.json(
       { error: "잘못된 요청이에요." } satisfies AiErrorResponse,
@@ -74,6 +73,13 @@ export async function POST(request: Request) {
     return Response.json(
       { error: "이미지를 처리할 수 없어요. 다른 사진으로 시도해 주세요." } satisfies AiErrorResponse,
       { status: STATUS_BAD_REQUEST },
+    );
+  }
+
+  if (!(await consumeDailyAiQuota(authed.token))) {
+    return Response.json(
+      { error: "오늘의 AI 사용량을 모두 썼어요. 내일 다시 이용해 주세요." } satisfies AiErrorResponse,
+      { status: STATUS_TOO_MANY_REQUESTS },
     );
   }
 

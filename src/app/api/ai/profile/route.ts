@@ -2,6 +2,12 @@ import type { AiErrorResponse, ProfileRequest, ProfileResponse } from "@/lib/ai/
 import { generateJson } from "@/lib/ai/gemini";
 import { buildProfilePrompt, PROFILE_SCHEMA } from "@/lib/ai/prompts";
 import { consumeDailyAiQuota, getUserFromRequest } from "@/lib/supabase/serverAuth";
+import {
+  isBehaviorSnapshot,
+  isPreferencePayload,
+  isRecord,
+  readJsonBody,
+} from "../requestValidation";
 
 const STATUS_BAD_REQUEST = 400;
 const STATUS_UNAUTHORIZED = 401;
@@ -34,25 +40,17 @@ export async function POST(request: Request) {
     );
   }
 
-  // 일일 사용량 상한 — 초과 시 429 (rate limit 1차)
-  // Daily usage cap — 429 when exceeded (first-stage rate limit)
-  if (!(await consumeDailyAiQuota(authed.token))) {
-    return Response.json(
-      { error: "오늘의 AI 사용량을 모두 썼어요. 내일 다시 이용해 주세요." } satisfies AiErrorResponse,
-      { status: STATUS_TOO_MANY_REQUESTS },
-    );
-  }
-
   let payload: ProfileRequest;
   try {
-    const raw = await request.text();
-    if (raw.length > MAX_BODY_CHARS) {
-      return Response.json(
-        { error: "요청이 너무 커요." } satisfies AiErrorResponse,
-        { status: STATUS_BAD_REQUEST },
-      );
+    const raw = await readJsonBody(request, MAX_BODY_CHARS);
+    if (
+      !isRecord(raw) ||
+      !isPreferencePayload(raw.preference) ||
+      !isBehaviorSnapshot(raw.behavior)
+    ) {
+      throw new Error("invalid profile payload");
     }
-    payload = JSON.parse(raw) as ProfileRequest;
+    payload = raw as unknown as ProfileRequest;
   } catch {
     return Response.json(
       { error: "잘못된 요청이에요." } satisfies AiErrorResponse,
@@ -60,10 +58,10 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!payload.preference || !payload.behavior) {
+  if (!(await consumeDailyAiQuota(authed.token))) {
     return Response.json(
-      { error: "분석에 필요한 데이터가 없어요." } satisfies AiErrorResponse,
-      { status: STATUS_BAD_REQUEST },
+      { error: "오늘의 AI 사용량을 모두 썼어요. 내일 다시 이용해 주세요." } satisfies AiErrorResponse,
+      { status: STATUS_TOO_MANY_REQUESTS },
     );
   }
 

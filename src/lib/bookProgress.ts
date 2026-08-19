@@ -1,26 +1,29 @@
-import { getRepository } from "@/lib/repository";
+import type { ReadingSession, UserBook } from "@/lib/types";
 
-// 세션 수정/삭제 후 서재 진행 상태(currentPage/lastReadAt)를 남은 기록 기준으로 재계산한다
-// Recompute shelf progress (currentPage/lastReadAt) from remaining sessions after edits/deletes
-export async function recomputeBookProgress(bookId: string): Promise<void> {
-  const repository = getRepository();
-  const userBook = await repository.getUserBook(bookId);
-  if (!userBook) {
-    return;
-  }
-
-  const sessions = await repository.listSessionsForBook(bookId);
+// 세션 수정/삭제 트랜잭션 안에서 사용할 수 있도록 I/O 없이 진행 상태를 계산한다.
+// Pure progress derivation so repositories can call it inside their own transactions.
+export function deriveBookProgress(
+  userBook: UserBook,
+  sessions: ReadingSession[],
+): Pick<UserBook, "currentPage" | "lastReadAt"> {
   if (sessions.length === 0) {
-    await repository.updateUserBook(bookId, {
+    return {
       currentPage: 0,
       lastReadAt: userBook.createdAt,
-    });
-    return;
+    };
   }
 
-  const latest = sessions.reduce((a, b) => (b.endedAt > a.endedAt ? b : a));
-  await repository.updateUserBook(bookId, {
+  const latest = sessions.reduce((a, b) => {
+    if (b.endedAt !== a.endedAt) {
+      return b.endedAt > a.endedAt ? b : a;
+    }
+    if (b.createdAt !== a.createdAt) {
+      return b.createdAt > a.createdAt ? b : a;
+    }
+    return b.id > a.id ? b : a;
+  });
+  return {
     currentPage: latest.endPage,
     lastReadAt: latest.endedAt,
-  });
+  };
 }

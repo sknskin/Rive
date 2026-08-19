@@ -10,7 +10,6 @@ import NotesQuotes from "@/components/library/NotesQuotes";
 import RatingStars from "@/components/library/RatingStars";
 import StatusSheet from "@/components/library/StatusSheet";
 import ManualSessionSheet from "@/components/read/ManualSessionSheet";
-import { recomputeBookProgress } from "@/lib/bookProgress";
 import { DEFAULT_START_PAGE, EXTRA_RATING_ITEMS, STATUS_LABELS } from "@/lib/constants";
 import { enrichBookMeta } from "@/lib/enrichBook";
 import { notifyLibraryChange } from "@/lib/libraryEvents";
@@ -211,10 +210,7 @@ export default function BookDetailPage() {
     setBusy(true);
     try {
       const repository = getRepository();
-      await repository.deleteSession(session.id);
-      // 삭제 후 남은 기록 기준으로 진행 상태를 재계산한다
-      // Recompute progress from remaining records after deletion
-      await recomputeBookProgress(session.bookId);
+      await repository.deleteSessionAndRecompute(session.id, session.bookId);
       notifyLibraryChange();
       setSessionAction(null);
       setDeleteArmed(false);
@@ -417,21 +413,22 @@ export default function BookDetailPage() {
                 현재 속도라면 약 {daysToFinish}일 후 완독 예상
               </p>
             )}
-            {userBook.status === "reading" && book.pageCount > 0 && (
-              <PlanLine
-                targetDate={userBook.targetDate}
-                remainingPages={book.pageCount - userBook.currentPage}
-                nowMs={loadedAtMs}
-                onOpen={() => {
-                  setPlanDateText(
-                    userBook.targetDate
-                      ? formatDateInput(new Date(userBook.targetDate))
-                      : "",
-                  );
-                  setPlanSheetOpen(true);
-                }}
-              />
-            )}
+          </div>
+        )}
+
+        {userBook?.status === "reading" && book.pageCount > 0 && (
+          <div className={userBook.currentPage > 0 ? "w-full max-w-60" : "mt-4 w-full max-w-60"}>
+            <PlanLine
+              targetDate={userBook.targetDate}
+              remainingPages={book.pageCount - userBook.currentPage}
+              nowMs={loadedAtMs}
+              onOpen={() => {
+                setPlanDateText(
+                  userBook.targetDate ? formatDateInput(new Date(userBook.targetDate)) : "",
+                );
+                setPlanSheetOpen(true);
+              }}
+            />
           </div>
         )}
 
@@ -679,6 +676,7 @@ export default function BookDetailPage() {
         <div className="px-2 pt-2">
           <h2 className="px-1 text-lg font-semibold tracking-tight">언제까지 완독할까요?</h2>
           <input
+            aria-label="완독 목표일"
             type="date"
             value={planDateText}
             min={formatDateInput(new Date(loadedAtMs || 0))}

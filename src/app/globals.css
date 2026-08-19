@@ -112,3 +112,16 @@ body {
   outline: 2px solid var(--tint);
   outline-offset: 2px;
 }
+
+/* 움직임 감소를 요청한 사용자는 장식용 애니메이션과 부드러운 스크롤을 건너뛴다 */
+/* Skip decorative animation and smooth scrolling when reduced motion is requested */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

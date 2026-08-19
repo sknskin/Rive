@@ -1,6 +1,7 @@
 import type { BookSearchResult } from "@/lib/types";
 import { SEARCH_RESULT_SIZE } from "@/lib/constants";
 import type { KakaoBookDocument, KakaoBookResponse } from "./types";
+import { fetchExternal } from "./fetchExternal";
 
 const KAKAO_BOOK_API_URL = "https://dapi.kakao.com/v3/search/book";
 const ISBN13_LENGTH = 13;
@@ -34,7 +35,7 @@ export async function searchKakao(query: string, apiKey: string): Promise<BookSe
   url.searchParams.set("query", query);
   url.searchParams.set("size", String(SEARCH_RESULT_SIZE));
 
-  const response = await fetch(url, {
+  const response = await fetchExternal(url, {
     headers: { Authorization: `KakaoAK ${apiKey}` },
   });
 

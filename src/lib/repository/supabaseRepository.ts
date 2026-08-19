@@ -15,12 +15,14 @@ import type {
 } from "@/lib/types";
 import type { WrappedSummary } from "@/lib/types";
 import { ACTIVE_SESSION_ID, AI_PROFILE_ID, PREFERENCE_PROFILE_ID } from "@/lib/constants";
+import { deriveBookProgress } from "@/lib/bookProgress";
 import { getSupabase } from "@/lib/supabase/client";
-import type { ReadingRepository } from "./types";
+import type { AtomicSessionWrite, ReadingRepository } from "./types";
 
 // Postgres unique 제약 위반 코드 — upsert 경합 시 재조회 폴백에 사용
 // Postgres unique-violation code — used for the upsert race fallback
 const UNIQUE_VIOLATION = "23505";
+const MISSING_RPC = "PGRST202";
 
 // ── row 타입과 매퍼 — DB snake_case ↔ 도메인 camelCase ────────────────
 // Row types and mappers — DB snake_case ↔ domain camelCase
@@ -157,6 +159,44 @@ const SESSION_COLUMNS: Record<string, string> = {
   pagesRead: "pages_read",
   memo: "memo",
 };
+
+function sessionPatchToRow(
+  patch: Partial<Omit<ReadingSession, "id" | "bookId" | "createdAt">>,
+): Record<string, unknown> {
+  const row: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(patch)) {
+    const column = SESSION_COLUMNS[key];
+    if (column) {
+      row[column] = value === undefined ? null : value;
+    }
+  }
+  return row;
+}
+
+function sessionToRow(session: ReadingSession): Record<string, unknown> {
+  return {
+    id: session.id,
+    book_id: session.bookId,
+    started_at: session.startedAt,
+    ended_at: session.endedAt,
+    duration_seconds: session.durationSeconds,
+    start_page: session.startPage,
+    end_page: session.endPage,
+    pages_read: session.pagesRead,
+    memo: session.memo,
+    created_at: session.createdAt,
+  };
+}
+
+function isMissingRpc(error: { code?: string } | null): boolean {
+  return error?.code === MISSING_RPC;
+}
+
+function warnMissingRpc(name: string): void {
+  console.warn(
+    `[SupabaseRepository] ${name} RPC is not deployed; using a non-atomic compatibility fallback`,
+  );
+}
 
 export interface RecommendationRow {
   id: string;
@@ -372,49 +412,132 @@ export class SupabaseRepository implements ReadingRepository {
     await this.updateUserBook(bookId, { currentPage, lastReadAt: timestamp });
   }
 
-  async addSession(session: Omit<ReadingSession, "id" | "createdAt">): Promise<ReadingSession> {
-    const created: ReadingSession = { ...session, id: crypto.randomUUID(), createdAt: Date.now() };
-    const result = await this.client.from("reading_sessions").insert({
-      id: created.id,
-      book_id: created.bookId,
-      started_at: created.startedAt,
-      ended_at: created.endedAt,
-      duration_seconds: created.durationSeconds,
-      start_page: created.startPage,
-      end_page: created.endPage,
-      pages_read: created.pagesRead,
-      memo: created.memo,
-      created_at: created.createdAt,
+  async saveSessionAtomic(input: AtomicSessionWrite): Promise<ReadingSession> {
+    const result = await this.client.rpc("save_reading_session", {
+      p_session: input.session,
+      p_progress_mode: input.progressMode,
+      p_mark_as_read: input.markAsRead ?? false,
+      p_clear_active: input.clearActiveSession ?? false,
     });
-    unwrap({ data: null, error: result.error }, "reading_sessions insert");
-    return created;
-  }
+    if (result.error) {
+      if (!isMissingRpc(result.error)) {
+        unwrap({ data: null, error: result.error }, "save_reading_session rpc");
+      }
+      warnMissingRpc("save_reading_session");
+      // Migration rollout compatibility: caller-owned PK makes this convergent even without the RPC.
+      const existingResult = await this.client
+        .from("reading_sessions")
+        .select("id,book_id")
+        .eq("id", input.session.id)
+        .maybeSingle();
+      const existing = unwrap(existingResult, "reading_sessions fallback existing") as {
+        id: string;
+        book_id: string;
+      } | null;
+      if (existing && existing.book_id !== input.session.bookId) {
+        throw new Error(`session id collision: ${input.session.id}`);
+      }
+      const upserted = await this.client
+        .from("reading_sessions")
+        .upsert(sessionToRow(input.session), { onConflict: "id" });
+      unwrap({ data: null, error: upserted.error }, "reading_sessions fallback upsert");
 
-  async updateSession(
-    id: string,
-    patch: Partial<Omit<ReadingSession, "id" | "bookId" | "createdAt">>,
-  ): Promise<void> {
-    const row: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(patch)) {
-      const column = SESSION_COLUMNS[key];
-      if (column) {
-        row[column] = value === undefined ? null : value;
+      const userBook = await this.getUserBook(input.session.bookId);
+      if (!userBook) {
+        throw new Error(`userBook not found: ${input.session.bookId}`);
+      }
+      let progress: Pick<UserBook, "currentPage" | "lastReadAt"> | undefined;
+      if (existing) {
+        progress = deriveBookProgress(
+          userBook,
+          await this.listSessionsForBook(input.session.bookId),
+        );
+      } else if (input.progressMode === "always") {
+        progress = { currentPage: input.session.endPage, lastReadAt: input.session.endedAt };
+      } else if (input.session.endedAt >= userBook.lastReadAt) {
+        progress = { currentPage: input.session.endPage, lastReadAt: input.session.endedAt };
+      }
+      if (progress || input.markAsRead) {
+        await this.updateUserBook(input.session.bookId, {
+          ...progress,
+          ...(input.markAsRead
+            ? { status: "read" as const, finishedAt: input.session.endedAt }
+            : {}),
+        });
+      }
+      if (input.clearActiveSession) {
+        const cleared = await this.client
+          .from("active_sessions")
+          .delete()
+          .eq("book_id", input.session.bookId)
+          .eq("started_at", input.session.startedAt)
+          .eq("start_page", input.session.startPage);
+        unwrap({ data: null, error: cleared.error }, "active_sessions fallback matched delete");
       }
     }
-    const result = await this.client
-      .from("reading_sessions")
-      .update(row)
-      .eq("id", id)
-      .select("id");
-    const updated = unwrap(result, "reading_sessions update") as { id: string }[];
-    if (updated.length === 0) {
-      throw new Error(`session not found: ${id}`);
-    }
+    return input.session;
   }
 
-  async deleteSession(id: string): Promise<void> {
-    const result = await this.client.from("reading_sessions").delete().eq("id", id);
-    unwrap({ data: null, error: result.error }, "reading_sessions delete");
+  async updateSessionAndRecompute(
+    id: string,
+    bookId: string,
+    patch: Partial<Omit<ReadingSession, "id" | "bookId" | "createdAt">>,
+  ): Promise<void> {
+    const result = await this.client.rpc("update_reading_session", {
+      p_session_id: id,
+      p_book_id: bookId,
+      p_patch: patch,
+    });
+    if (!result.error) {
+      return;
+    }
+    if (!isMissingRpc(result.error)) {
+      unwrap({ data: null, error: result.error }, "update_reading_session rpc");
+    }
+    warnMissingRpc("update_reading_session");
+    const updated = await this.client
+      .from("reading_sessions")
+      .update(sessionPatchToRow(patch))
+      .eq("id", id)
+      .eq("book_id", bookId)
+      .select("id");
+    const rows = unwrap(updated, "reading_sessions fallback update") as { id: string }[];
+    if (rows.length === 0) {
+      throw new Error(`session not found: ${id}`);
+    }
+    await this.recomputeBookProgressFallback(bookId);
+  }
+
+  async deleteSessionAndRecompute(id: string, bookId: string): Promise<void> {
+    const result = await this.client.rpc("delete_reading_session", {
+      p_session_id: id,
+      p_book_id: bookId,
+    });
+    if (!result.error) {
+      return;
+    }
+    if (!isMissingRpc(result.error)) {
+      unwrap({ data: null, error: result.error }, "delete_reading_session rpc");
+    }
+    warnMissingRpc("delete_reading_session");
+    const deleted = await this.client
+      .from("reading_sessions")
+      .delete()
+      .eq("id", id)
+      .eq("book_id", bookId);
+    unwrap({ data: null, error: deleted.error }, "reading_sessions fallback delete");
+    await this.recomputeBookProgressFallback(bookId);
+  }
+
+  private async recomputeBookProgressFallback(bookId: string): Promise<void> {
+    const [userBook, sessions] = await Promise.all([
+      this.getUserBook(bookId),
+      this.listSessionsForBook(bookId),
+    ]);
+    if (!userBook) {
+      throw new Error(`userBook not found: ${bookId}`);
+    }
+    await this.updateUserBook(bookId, deriveBookProgress(userBook, sessions));
   }
 
   async removeBookCompletely(bookId: string): Promise<void> {

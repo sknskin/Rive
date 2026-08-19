@@ -1,4 +1,5 @@
 import type { BookMeta } from "./enrichGoogle";
+import { fetchExternal } from "./fetchExternal";
 
 // Open Library 메타 보강 — 키가 필요 없는 3순위 소스 (스펙 §60–61)
 // Open Library enrichment — keyless third-priority source (spec §60–61)
@@ -48,7 +49,7 @@ export async function fetchOpenLibraryMeta(isbn13: string): Promise<BookMeta | n
   url.searchParams.set("format", "json");
   url.searchParams.set("jscmd", "data");
 
-  const response = await fetch(url);
+  const response = await fetchExternal(url);
   if (!response.ok) {
     throw new Error(`open library lookup failed: ${response.status}`);
   }

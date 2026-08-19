@@ -1,4 +1,5 @@
 import type { GoogleBooksResponse } from "./types";
+import { fetchExternal } from "./fetchExternal";
 
 const GOOGLE_BOOKS_API_URL = "https://www.googleapis.com/books/v1/volumes";
 const SINGLE_RESULT = 1;
@@ -21,7 +22,7 @@ async function queryGoogle(query: string): Promise<BookMeta | null> {
     url.searchParams.set("key", apiKey);
   }
 
-  const response = await fetch(url);
+  const response = await fetchExternal(url);
   if (!response.ok) {
     throw new Error(`google meta lookup failed: ${response.status}`);
   }

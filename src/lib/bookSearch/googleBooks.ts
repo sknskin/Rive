@@ -1,6 +1,7 @@
 import type { BookSearchResult } from "@/lib/types";
 import { SEARCH_RESULT_SIZE } from "@/lib/constants";
 import type { GoogleBooksResponse, GoogleVolume } from "./types";
+import { fetchExternal } from "./fetchExternal";
 
 const GOOGLE_BOOKS_API_URL = "https://www.googleapis.com/books/v1/volumes";
 const ISBN13_TYPE = "ISBN_13";
@@ -41,7 +42,7 @@ export async function searchGoogleBooks(query: string): Promise<BookSearchResult
     url.searchParams.set("key", apiKey);
   }
 
-  const response = await fetch(url);
+  const response = await fetchExternal(url);
 
   if (!response.ok) {
     throw new Error(`google books search failed: ${response.status}`);

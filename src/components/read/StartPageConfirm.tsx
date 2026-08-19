@@ -44,6 +44,7 @@ export default function StartPageConfirm({
           <input
             type="number"
             inputMode="numeric"
+            aria-label="시작 페이지"
             autoFocus
             value={pageText}
             min={DEFAULT_START_PAGE}

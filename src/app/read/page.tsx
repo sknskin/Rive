@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import PageSkeleton from "@/components/PageSkeleton";
@@ -33,6 +33,9 @@ export default function ReadPage() {
   // Optional extra-evaluation step after the star rating (spec §25)
   const [extraStep, setExtraStep] = useState(false);
   const [extraRatings, setExtraRatings] = useState<Record<string, number>>({});
+  // 같은 저장을 재시도할 때 동일 PK를 보내 네트워크 결과가 모호해도 중복 세션을 만들지 않는다.
+  // Reuse one PK across retries so an ambiguous network result cannot create a duplicate session.
+  const saveIdentityRef = useRef<{ id: string; createdAt: number } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -109,23 +112,25 @@ export default function ReadPage() {
     const repository = getRepository();
     const durationSeconds = Math.round((stoppedAt - active.startedAt) / MS_PER_SECOND);
     const pagesRead = Math.max(0, input.endPage - active.startPage);
+    saveIdentityRef.current ??= { id: crypto.randomUUID(), createdAt: Date.now() };
 
     try {
-      await repository.addSession({
-        bookId: active.bookId,
-        startedAt: active.startedAt,
-        endedAt: stoppedAt,
-        durationSeconds,
-        startPage: active.startPage,
-        endPage: input.endPage,
-        pagesRead,
-        memo: input.memo,
+      await repository.saveSessionAtomic({
+        session: {
+          ...saveIdentityRef.current,
+          bookId: active.bookId,
+          startedAt: active.startedAt,
+          endedAt: stoppedAt,
+          durationSeconds,
+          startPage: active.startPage,
+          endPage: input.endPage,
+          pagesRead,
+          memo: input.memo,
+        },
+        progressMode: "always",
+        markAsRead: input.markAsRead,
+        clearActiveSession: true,
       });
-      await repository.touchLastRead(active.bookId, input.endPage, stoppedAt);
-      if (input.markAsRead) {
-        await repository.setBookStatus(active.bookId, "read");
-      }
-      await repository.clearActiveSession();
       hapticSuccess();
       if (input.markAsRead) {
         // 완독이면 홈 복귀 전에 별점 시트를 먼저 보여준다

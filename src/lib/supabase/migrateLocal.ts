@@ -114,9 +114,12 @@ export async function uploadDomainTables(tables: DomainTables): Promise<{ import
     throw new Error(`[migrate] ${context}: ${message}`);
   };
 
-  const allBooks = (tables.books ?? []).filter(
-    (book) => typeof book?.id === "string" && typeof book?.title === "string",
-  );
+  const allBooks = tables.books ?? [];
+  for (const book of allBooks) {
+    if (typeof book?.id !== "string" || typeof book?.title !== "string") {
+      fail("books", "invalid row");
+    }
+  }
   const { idMap, serverIds } = await buildBookIdMap(allBooks);
   // 서버에 이미 있는 책은 서버 행을 유지한다(중복 생성·덮어쓰기 방지)
   // Books already on the server keep their server rows (no duplicates, no clobbering)
@@ -130,33 +133,40 @@ export async function uploadDomainTables(tables: DomainTables): Promise<{ import
     ...serverIds,
   ]);
 
-  // 자식 테이블은 book_id를 재매핑하고, 참조가 깨졌거나 값이 손상된 행을 걸러낸다
-  // Children get remapped book ids; rows with broken refs or bad values are dropped
-  const userBooks = (tables.userBooks ?? [])
-    .filter(
-      (userBook) =>
-        typeof userBook?.bookId === "string" &&
-        VALID_STATUSES.has(userBook?.status) &&
-        knownBookIds.has(mapBookId(userBook.bookId)),
-    )
-    .map((userBook) => ({ ...userBook, bookId: mapBookId(userBook.bookId) }));
+  // 자식 테이블은 book_id를 재매핑하고, 깨진 참조가 하나라도 있으면 전체 가져오기를 중단한다
+  // Remap child book ids and abort the whole import if any reference is broken.
+  const requireKnownBook = (context: string, bookId: unknown): string => {
+    if (typeof bookId !== "string") {
+      return fail(context, "invalid book reference");
+    }
+    const mapped = mapBookId(bookId);
+    if (!knownBookIds.has(mapped)) {
+      fail(context, `unknown book reference: ${bookId}`);
+    }
+    return mapped;
+  };
 
-  const sessions = (tables.readingSessions ?? [])
-    .filter(
-      (session) =>
-        typeof session?.id === "string" && knownBookIds.has(mapBookId(session.bookId)),
-    )
-    .map((session) => ({ ...session, bookId: mapBookId(session.bookId) }));
+  const userBooks = (tables.userBooks ?? []).map((userBook) => {
+    if (!VALID_STATUSES.has(userBook?.status)) {
+      fail("userBooks", "invalid status");
+    }
+    return { ...userBook, bookId: requireKnownBook("userBooks", userBook?.bookId) };
+  });
 
-  const notes = (tables.notes ?? [])
-    .filter((note) => typeof note?.id === "string" && knownBookIds.has(mapBookId(note.bookId)))
-    .map((note) => ({ ...note, bookId: mapBookId(note.bookId) }));
+  const sessions = (tables.readingSessions ?? []).map((session) => {
+    if (typeof session?.id !== "string") fail("readingSessions", "invalid row");
+    return { ...session, bookId: requireKnownBook("readingSessions", session?.bookId) };
+  });
 
-  const quotes = (tables.quotes ?? [])
-    .filter(
-      (quote) => typeof quote?.id === "string" && knownBookIds.has(mapBookId(quote.bookId)),
-    )
-    .map((quote) => ({ ...quote, bookId: mapBookId(quote.bookId) }));
+  const notes = (tables.notes ?? []).map((note) => {
+    if (typeof note?.id !== "string") fail("notes", "invalid row");
+    return { ...note, bookId: requireKnownBook("notes", note?.bookId) };
+  });
+
+  const quotes = (tables.quotes ?? []).map((quote) => {
+    if (typeof quote?.id !== "string") fail("quotes", "invalid row");
+    return { ...quote, bookId: requireKnownBook("quotes", quote?.bookId) };
+  });
 
   // 나머지 테이블은 형태만 가볍게 거른다 — 상세 검증과 원자성은 RPC 트랜잭션이 맡는다
   // Light shape filtering for the rest; the RPC transaction owns atomicity

@@ -47,18 +47,16 @@ export function useMonthSessions(
         const endMs = new Date(year, month + 1, 1).getTime();
         const sessions = await repository.listSessionsByDateRange(startMs, endMs);
 
-        // 같은 책 조회를 반복하지 않도록 캐시한다
-        // Cache book lookups to avoid repeated queries
-        const bookCache = new Map<string, Book | undefined>();
+        // 월 세션에 등장한 책을 한 번에 조회해 원격 저장소의 N+1 왕복을 피한다
+        // Fetch all books for the month at once to avoid N+1 remote round trips
+        const bookIds = [...new Set(sessions.map((session) => session.bookId))];
+        const booksById = await repository.listBooksByIds(bookIds);
         const days = new Map<number, DaySummary>();
 
         for (const session of sessions) {
-          if (!bookCache.has(session.bookId)) {
-            bookCache.set(session.bookId, await repository.getBook(session.bookId));
-          }
           const day = new Date(session.startedAt).getDate();
           const summary = days.get(day) ?? { items: [], totalSeconds: 0, totalPages: 0 };
-          summary.items.push({ session, book: bookCache.get(session.bookId) });
+          summary.items.push({ session, book: booksById.get(session.bookId) });
           summary.totalSeconds += session.durationSeconds;
           summary.totalPages += session.pagesRead;
           days.set(day, summary);

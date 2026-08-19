@@ -17,6 +17,14 @@ import { searchKakao } from "@/lib/bookSearch/kakao";
 import { RECOMMENDATION_COUNT } from "@/lib/constants";
 import { consumeDailyAiQuota, getUserFromRequest } from "@/lib/supabase/serverAuth";
 import type { BookSearchResult } from "@/lib/types";
+import {
+  isBehaviorSnapshot,
+  isPreferencePayload,
+  isProfileResponse,
+  isRecord,
+  isStringArray,
+  readJsonBody,
+} from "../requestValidation";
 
 const STATUS_UNAUTHORIZED = 401;
 const STATUS_TOO_MANY_REQUESTS = 429;
@@ -85,35 +93,24 @@ export async function POST(request: Request) {
     );
   }
 
-  // 일일 사용량 상한 — 초과 시 429 (rate limit 1차)
-  // Daily usage cap — 429 when exceeded (first-stage rate limit)
-  if (!(await consumeDailyAiQuota(authed.token))) {
-    return Response.json(
-      { error: "오늘의 AI 사용량을 모두 썼어요. 내일 다시 이용해 주세요." } satisfies AiErrorResponse,
-      { status: STATUS_TOO_MANY_REQUESTS },
-    );
-  }
-
   let payload: RecommendRequest;
   try {
-    const raw = await request.text();
-    if (raw.length > MAX_BODY_CHARS) {
-      return Response.json(
-        { error: "요청이 너무 커요." } satisfies AiErrorResponse,
-        { status: STATUS_BAD_REQUEST },
-      );
+    const raw = await readJsonBody(request, MAX_BODY_CHARS);
+    if (
+      !isRecord(raw) ||
+      !isPreferencePayload(raw.preference) ||
+      !isBehaviorSnapshot(raw.behavior) ||
+      !isProfileResponse(raw.profile) ||
+      !isStringArray(raw.excludeTitles) ||
+      (raw.mood !== undefined && typeof raw.mood !== "string") ||
+      (raw.timeAvailable !== undefined && typeof raw.timeAvailable !== "string")
+    ) {
+      throw new Error("invalid recommendation payload");
     }
-    payload = JSON.parse(raw) as RecommendRequest;
+    payload = raw as unknown as RecommendRequest;
   } catch {
     return Response.json(
       { error: "잘못된 요청이에요." } satisfies AiErrorResponse,
-      { status: STATUS_BAD_REQUEST },
-    );
-  }
-
-  if (!payload.preference || !payload.profile) {
-    return Response.json(
-      { error: "추천에 필요한 데이터가 없어요." } satisfies AiErrorResponse,
       { status: STATUS_BAD_REQUEST },
     );
   }
@@ -122,6 +119,13 @@ export async function POST(request: Request) {
   // Cap the exclude list to keep the prompt bounded
   if (payload.excludeTitles && payload.excludeTitles.length > MAX_EXCLUDE_TITLES) {
     payload.excludeTitles = payload.excludeTitles.slice(0, MAX_EXCLUDE_TITLES);
+  }
+
+  if (!(await consumeDailyAiQuota(authed.token))) {
+    return Response.json(
+      { error: "오늘의 AI 사용량을 모두 썼어요. 내일 다시 이용해 주세요." } satisfies AiErrorResponse,
+      { status: STATUS_TOO_MANY_REQUESTS },
+    );
   }
 
   try {

@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import BookCover from "@/components/BookCover";
 import BottomSheet from "@/components/BottomSheet";
 import BookSearch from "@/components/read/BookSearch";
-import { recomputeBookProgress } from "@/lib/bookProgress";
 import { DEFAULT_START_PAGE } from "@/lib/constants";
 import { enrichBookMeta } from "@/lib/enrichBook";
 import { formatDateInput, formatTimeOfDay } from "@/lib/format";
@@ -86,6 +85,7 @@ function ManualSessionContent({
   const [memo, setMemo] = useState(editSession ? editSession.memo : "");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const saveIdentityRef = useRef<{ id: string; createdAt: number } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -196,7 +196,7 @@ function ManualSessionContent({
       if (editSession) {
         // 수정 모드 — 세션을 갱신하고 진행 상태를 전체 기록 기준으로 재계산한다
         // Edit mode — update the session, then recompute progress from all records
-        await repository.updateSession(editSession.id, {
+        await repository.updateSessionAndRecompute(editSession.id, editSession.bookId, {
           startedAt,
           endedAt,
           durationSeconds: Math.round((endedAt - startedAt) / MS_PER_SECOND),
@@ -205,27 +205,25 @@ function ManualSessionContent({
           pagesRead: Math.max(0, endPage - startPage),
           memo: memo.trim(),
         });
-        await recomputeBookProgress(editSession.bookId);
       } else {
-        await repository.addSession({
-          bookId: selected.book.id,
-          startedAt,
-          endedAt,
-          durationSeconds: Math.round((endedAt - startedAt) / MS_PER_SECOND),
-          startPage,
-          endPage,
-          pagesRead: Math.max(0, endPage - startPage),
-          memo: memo.trim(),
+        saveIdentityRef.current ??= { id: crypto.randomUUID(), createdAt: Date.now() };
+        await repository.saveSessionAtomic({
+          session: {
+            ...saveIdentityRef.current,
+            bookId: selected.book.id,
+            startedAt,
+            endedAt,
+            durationSeconds: Math.round((endedAt - startedAt) / MS_PER_SECOND),
+            startPage,
+            endPage,
+            pagesRead: Math.max(0, endPage - startPage),
+            memo: memo.trim(),
+          },
+          progressMode: "if-newer",
         });
-
-        // 과거 기록이 최신 진행 상태를 되돌리지 않도록 최신 기록일 때만 갱신한다
-        // Only advance progress when this record is newer than the latest one
-        const userBook = await repository.getUserBook(selected.book.id);
-        if (userBook && endedAt >= userBook.lastReadAt) {
-          await repository.touchLastRead(selected.book.id, endPage, endedAt);
-        }
       }
 
+      saveIdentityRef.current = null;
       notifyLibraryChange();
       onSaved();
       onClose();
@@ -315,6 +313,7 @@ function ManualSessionContent({
         <label className="flex flex-col gap-1.5 text-sm font-medium text-ink-secondary">
           날짜
           <input
+            aria-label="독서 날짜"
             type="date"
             value={dateText}
             max={formatDateInput(new Date())}
@@ -327,6 +326,7 @@ function ManualSessionContent({
           <label className="flex flex-col gap-1.5 text-sm font-medium text-ink-secondary">
             시작 시간
             <input
+              aria-label="독서 시작 시간"
               type="time"
               value={startTimeText}
               onChange={(event) => setStartTimeText(event.target.value)}
@@ -336,6 +336,7 @@ function ManualSessionContent({
           <label className="flex flex-col gap-1.5 text-sm font-medium text-ink-secondary">
             종료 시간
             <input
+              aria-label="독서 종료 시간"
               type="time"
               value={endTimeText}
               onChange={(event) => setEndTimeText(event.target.value)}
@@ -351,6 +352,7 @@ function ManualSessionContent({
           <label className="flex flex-col gap-1.5 text-sm font-medium text-ink-secondary">
             시작 페이지
             <input
+              aria-label="시작 페이지"
               type="number"
               inputMode="numeric"
               min={DEFAULT_START_PAGE}
@@ -362,6 +364,7 @@ function ManualSessionContent({
           <label className="flex flex-col gap-1.5 text-sm font-medium text-ink-secondary">
             종료 페이지
             <input
+              aria-label="종료 페이지"
               type="number"
               inputMode="numeric"
               min={DEFAULT_START_PAGE}

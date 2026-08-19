@@ -46,6 +46,16 @@ describe("GET /api/books/search", () => {
     expect(response.status).toBe(400);
   });
 
+  it("201자 검색어는 400을 반환하고 외부 API를 호출하지 않는다", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const response = await GET(
+      new Request(`http://test/api/books/search?q=${"a".repeat(201)}`),
+    );
+    expect(response.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("카카오 키가 있으면 카카오 결과를 우선 반환한다", async () => {
     vi.stubEnv("KAKAO_REST_API_KEY", "test-key");
     vi.stubGlobal(
@@ -56,6 +66,7 @@ describe("GET /api/books/search", () => {
     const body = await response.json();
     expect(body.source).toBe("kakao");
     expect(body.results[0].isbn13).toBe("9788934972464");
+    expect(response.headers.get("cache-control")).toContain("s-maxage=3600");
   });
 
   it("카카오 실패 시 구글 북스로 폴백한다", async () => {

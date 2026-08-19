@@ -24,6 +24,16 @@ describe("GET /api/books/enrich", () => {
     expect(response.status).toBe(400);
   });
 
+  it("201자 파라미터는 400을 반환하고 외부 API를 호출하지 않는다", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const response = await GET(
+      new Request(`http://test/api/books/enrich?title=${"a".repeat(201)}`),
+    );
+    expect(response.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("구글이 응답하면 구글 메타를 반환한다", async () => {
     vi.stubGlobal(
       "fetch",
@@ -43,6 +53,7 @@ describe("GET /api/books/enrich", () => {
     );
     const body = await response.json();
     expect(body).toEqual({ pageCount: 320, description: "설명", categories: ["History"] });
+    expect(response.headers.get("cache-control")).toContain("s-maxage=86400");
   });
 
   it("구글이 429로 실패하면 오픈라이브러리 폴백을 사용한다", async () => {

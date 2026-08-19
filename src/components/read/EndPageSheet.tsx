@@ -72,7 +72,7 @@ export default function EndPageSheet({
             className="nums mt-2 w-full rounded-xl bg-fill px-4 py-3.5 text-center text-2xl font-semibold outline-none placeholder:text-ink-tertiary focus:ring-2 focus:ring-tint"
           />
           {pageText !== "" && !validPage && (
-            <p className="mt-1.5 text-sm text-danger">
+            <p role="alert" className="mt-1.5 text-sm text-danger">
               시작 페이지(p.{startPage})보다 큰 숫자를 입력해 주세요.
             </p>
           )}
@@ -90,6 +90,7 @@ export default function EndPageSheet({
           )}
 
           <textarea
+            aria-label="독서 메모"
             value={memo}
             onChange={(event) => setMemo(event.target.value)}
             placeholder="메모 추가 (선택)"
@@ -98,7 +99,11 @@ export default function EndPageSheet({
           />
         </div>
 
-        {saveError !== "" && <p className="mt-3 text-sm text-danger">{saveError}</p>}
+        {saveError !== "" && (
+          <p role="alert" className="mt-3 text-sm text-danger">
+            {saveError}
+          </p>
+        )}
 
         <motion.button
           type="button"
