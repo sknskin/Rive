@@ -1,8 +1,8 @@
 import { getDb } from "@/lib/db";
 import { notifyLibraryChange } from "@/lib/libraryEvents";
 
-// 데이터 백업/복원 — Dexie 전 테이블을 JSON으로 내보내고 id 기준 병합 복원 (스펙 §82)
-// Data backup/restore — exports all Dexie tables as JSON, restores with id-based merge (spec §82)
+// 데이터 백업/복원 — 일회성 상태인 activeSession을 제외한 전 테이블을 JSON으로 내보내고 id 기준 병합 복원 (스펙 §82)
+// Data backup/restore — exports every table except the transient activeSession, restores with id-based merge (spec §82)
 // 주의: 백업 유틸 성격상 Repository 경계 대신 DB에 직접 접근한다 (Supabase 전환 시 재작성 대상)
 // Note: as a backup utility this bypasses the repository boundary (rewrite when moving to Supabase)
 
@@ -62,6 +62,12 @@ export async function importAllData(file: File): Promise<ImportResult> {
 
   if (payload.app !== "rive" || typeof payload.version !== "number" || !payload.tables) {
     throw new Error("not a rive backup file");
+  }
+
+  // 앱보다 새 버전의 백업은 스키마를 알 수 없으므로 거부한다 (5차 조사 L15)
+  // Reject backups newer than the app — their schema is unknown here (audit 5 L15)
+  if (payload.version > EXPORT_VERSION) {
+    throw new Error(`unsupported backup version: ${payload.version}`);
   }
 
   const db = getDb();

@@ -60,6 +60,15 @@ let dbInstance: RiveDatabase | null = null;
 export function getDb(): RiveDatabase {
   if (!dbInstance) {
     dbInstance = new RiveDatabase();
+    // 브라우저에 영구 스토리지를 요청한다 — 저장 공간 정리 시 IndexedDB가 지워지는 것을 방지
+    // (거부돼도 동작에는 영향 없음, 최선 노력)
+    // Ask the browser for persistent storage so cleanup won't evict IndexedDB
+    // (best effort — a denial does not affect functionality)
+    if (typeof navigator !== "undefined" && navigator.storage?.persist) {
+      navigator.storage.persist().catch((error) => {
+        console.error("[db] persistent storage request failed:", error);
+      });
+    }
   }
   return dbInstance;
 }
