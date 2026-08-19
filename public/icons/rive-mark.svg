@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Rive open book and R mark</title>
+  <rect width="512" height="512" fill="#111113" />
+  <g
+    fill="none"
+    stroke="#f2f2f7"
+    stroke-width="28"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    transform="translate(256 256) scale(1.16) translate(-256 -256)"
+  >
+    <path d="M256 174c-43-34-98-38-160-22v210c62-16 117-8 160 28" />
+    <path d="M256 174c43-34 98-38 160-22v210c-62-16-117-8-160 28" />
+    <path d="M256 174v216" />
+    <path d="M256 206h68c40 0 64 19 64 52s-24 52-64 52h-68" />
+    <path d="m324 310 66 73" />
+  </g>
+</svg>
