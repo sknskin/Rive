@@ -12,8 +12,22 @@ import type { BookSearchResult } from "@/lib/types";
 export function useStartReading() {
   const router = useRouter();
 
+  // 이미 진행 중인 세션이 있으면 덮어쓰지 않고 그 세션으로 이동한다 (6차 C3, 다기기 보호)
+  // If a session is already running, resume it instead of overwriting (audit 6 C3)
+  async function resumeIfActive(): Promise<boolean> {
+    const active = await getRepository().getActiveSession();
+    if (active) {
+      router.push("/read");
+      return true;
+    }
+    return false;
+  }
+
   async function startExistingBook(bookId: string, startPage: number): Promise<void> {
     const repository = getRepository();
+    if (await resumeIfActive()) {
+      return;
+    }
     // Want/Paused 책을 읽기 시작하면 Reading 상태로 전환한다 (완독/중단 이력은 유지)
     // Starting a want/paused book moves it to reading (read/dnf history preserved)
     const userBook = await repository.getUserBook(bookId);
@@ -30,6 +44,9 @@ export function useStartReading() {
     startPage: number = DEFAULT_START_PAGE,
   ): Promise<void> {
     const repository = getRepository();
+    if (await resumeIfActive()) {
+      return;
+    }
     // 검색에서 고른 새 책은 Library에 자동 등록하고 Reading 상태로 만든다 (스펙 §5)
     // A new book picked from search is auto-registered and marked Reading (spec §5)
     const book = await repository.upsertBookByIsbn(result);
