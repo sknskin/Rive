@@ -24,7 +24,16 @@ function getBroadcastChannel(): BroadcastChannel | null {
   return broadcastChannel;
 }
 
+// 마지막 로컬 발행 시각 — Realtime이 자기 쓰기 에코를 걸러내는 데 쓴다 (7차 D6)
+// Last local notify timestamp — lets Realtime skip echoes of our own writes (audit 7 D6)
+let lastNotifyAtMs = 0;
+
+export function getLastLibraryNotifyAt(): number {
+  return lastNotifyAtMs;
+}
+
 export function notifyLibraryChange(): void {
+  lastNotifyAtMs = Date.now();
   window.dispatchEvent(new Event(LIBRARY_CHANGE_EVENT));
   try {
     getBroadcastChannel()?.postMessage(LIBRARY_CHANGE_EVENT);

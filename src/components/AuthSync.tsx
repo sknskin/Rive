@@ -2,7 +2,11 @@
 
 import { useEffect } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { LIBRARY_CHANGE_EVENT, notifyLibraryChange } from "@/lib/libraryEvents";
+import {
+  getLastLibraryNotifyAt,
+  LIBRARY_CHANGE_EVENT,
+  notifyLibraryChange,
+} from "@/lib/libraryEvents";
 import { getSupabase, isServerMode, setServerMode } from "@/lib/supabase/client";
 
 // Realtime으로 감시할 사용자 데이터 테이블 (마이그레이션 v2에서 발행 등록됨)
@@ -23,6 +27,10 @@ const REALTIME_TABLES = [
 // One action emits several table events, so debounce into a single refresh
 const REALTIME_DEBOUNCE_MS = 400;
 
+// 직전에 이 탭이 직접 발행했다면 Realtime 에코로 판단해 건너뛴다 (7차 D6)
+// Events arriving right after our own notify are treated as self-echo (audit 7 D6)
+const SELF_ECHO_WINDOW_MS = 2000;
+
 // 세션과 저장 모드 플래그를 정합시키는 전역 컴포넌트 (렌더 없음)
 // Global renderless component keeping the session and storage-mode flag in sync
 // - Google OAuth 리다이렉트 복귀 시 세션을 감지해 서버 모드로 전환한다 (설계 B3)
@@ -40,15 +48,19 @@ export default function AuthSync() {
         }
         const hasSession = data.session !== null;
         if (hasSession && !isServerMode()) {
-          // OAuth 복귀 직후 등 — 플래그를 세우고 서버 모드로 다시 그린다
-          // Right after an OAuth return etc. — set the flag and repaint in server mode
-          setServerMode(true);
-          window.location.reload();
+          // OAuth 복귀 직후 등 — 플래그를 세우고 서버 모드로 다시 그린다.
+          // 저장 실패 시에는 리로드하지 않는다 — 무한 리로드 루프 방지 (7차 D2)
+          // Right after an OAuth return etc. — set the flag and repaint in server mode.
+          // Skip the reload if the write failed, preventing an infinite loop (audit 7 D2)
+          if (setServerMode(true)) {
+            window.location.reload();
+          }
           return;
         }
         if (!hasSession && isServerMode()) {
-          setServerMode(false);
-          window.location.reload();
+          if (setServerMode(false)) {
+            window.location.reload();
+          }
         }
       } catch (error) {
         console.error("[AuthSync] session check failed:", error);
@@ -62,12 +74,37 @@ export default function AuthSync() {
   }, []);
 
   useEffect(() => {
-    // 다른 기기에서 기록했을 수 있으므로, 서버 모드에서 창 복귀 시 화면 재조회를 유도한다
-    // Another device may have written data — nudge refetch when the tab becomes visible
-    function handleVisibilityChange() {
-      if (document.visibilityState === "visible" && isServerMode()) {
-        notifyLibraryChange();
+    // 세션 만료·타 기기 로그아웃을 감지해 모드 플래그를 정리한다 (7차 D5)
+    // Detect session expiry or remote sign-out and clean the mode flag (audit 7 D5)
+    const { data } = getSupabase().auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT" && isServerMode()) {
+        if (setServerMode(false)) {
+          window.location.reload();
+        }
       }
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    // 다른 기기에서 기록했을 수 있으므로, 서버 모드에서 창 복귀 시 세션 확인 후 재조회한다
+    // On tab return in server mode, re-verify the session then nudge a refetch (audit 7 D5)
+    function handleVisibilityChange() {
+      if (document.visibilityState !== "visible" || !isServerMode()) {
+        return;
+      }
+      getSupabase()
+        .auth.getSession()
+        .then(({ data }) => {
+          if (!data.session) {
+            if (setServerMode(false)) {
+              window.location.reload();
+            }
+            return;
+          }
+          notifyLibraryChange();
+        })
+        .catch((error) => console.error("[AuthSync] visibility session check failed:", error));
     }
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
@@ -85,6 +122,11 @@ export default function AuthSync() {
     let cancelled = false;
 
     const handleChange = () => {
+      // 이 탭이 방금 발행했다면 자기 쓰기 에코 — 재조회 중복을 막는다 (7차 D6)
+      // Skip if this tab just notified — that's our own write echoing back (audit 7 D6)
+      if (Date.now() - getLastLibraryNotifyAt() < SELF_ECHO_WINDOW_MS) {
+        return;
+      }
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
         // 각 탭이 자체 구독을 가지므로 이 탭만 갱신한다(브로드캐스트 중복 방지)
