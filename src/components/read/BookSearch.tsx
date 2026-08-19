@@ -14,6 +14,7 @@ interface BookSearchProps {
 export default function BookSearch({ onSelect }: BookSearchProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<BookSearchResult[]>([]);
+  const [source, setSource] = useState<"kakao" | "google" | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const requestSeq = useRef(0);
@@ -50,6 +51,7 @@ export default function BookSearch({ onSelect }: BookSearchProps) {
         // Prevent a stale response from overwriting newer results
         if (seq === requestSeq.current) {
           setResults(data.results);
+          setSource(data.source);
           setError("");
         }
       } catch (searchError) {
@@ -114,6 +116,12 @@ export default function BookSearch({ onSelect }: BookSearchProps) {
 
         {loading && results.length === 0 && (
           <p className="px-2 py-8 text-center text-sm text-ink-tertiary">검색 중…</p>
+        )}
+
+        {results.length > 0 && source !== null && (
+          <p className="px-2 py-2 text-right text-[11px] text-ink-tertiary">
+            출처 · {source === "kakao" ? "카카오 도서" : "Google Books"}
+          </p>
         )}
       </div>
     </div>

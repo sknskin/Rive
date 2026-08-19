@@ -21,6 +21,7 @@ type SheetView =
 interface ReadingPick {
   book: Book;
   nextPage: number;
+  upNextAt?: number;
 }
 
 interface ReadSheetProps {
@@ -43,6 +44,7 @@ export default function ReadSheet({ open, onClose }: ReadSheetProps) {
 function ReadSheetContent({ onClose }: { onClose: () => void }) {
   const [view, setView] = useState<SheetView>({ kind: "pick" });
   const [picks, setPicks] = useState<ReadingPick[]>([]);
+  const [upNextPicks, setUpNextPicks] = useState<ReadingPick[]>([]);
   const [wantPicks, setWantPicks] = useState<ReadingPick[]>([]);
   const [loadError, setLoadError] = useState("");
   const [starting, setStarting] = useState(false);
@@ -68,21 +70,32 @@ function ReadSheetContent({ onClose }: { onClose: () => void }) {
         }
 
         // Want to Read 책도 바로 시작할 수 있게 함께 보여준다 (스펙 §4)
-        // Also surface want-to-read books for instant starts (spec §4)
+        // Up Next로 지정한 책은 별도 섹션으로 우선 노출한다 (스펙 §37)
+        // Also surface want-to-read books; Up Next picks get their own section (spec §4, §37)
         const wantBooks = await repository.listUserBooksByStatus("want");
+        const loadedUpNext: ReadingPick[] = [];
         const loadedWant: ReadingPick[] = [];
         for (const userBook of wantBooks) {
           const book = await repository.getBook(userBook.bookId);
-          if (book) {
-            loadedWant.push({
-              book,
-              nextPage: Math.max(userBook.currentPage, DEFAULT_START_PAGE),
-            });
+          if (!book) {
+            continue;
+          }
+          const pick = {
+            book,
+            nextPage: Math.max(userBook.currentPage, DEFAULT_START_PAGE),
+            upNextAt: userBook.upNextAt,
+          };
+          if (userBook.upNextAt !== undefined) {
+            loadedUpNext.push(pick);
+          } else {
+            loadedWant.push(pick);
           }
         }
+        loadedUpNext.sort((a, b) => (a.upNextAt ?? 0) - (b.upNextAt ?? 0));
 
         if (!cancelled) {
           setPicks(loaded);
+          setUpNextPicks(loadedUpNext);
           setWantPicks(loadedWant);
         }
       } catch (error) {
@@ -191,6 +204,39 @@ function ReadSheetContent({ onClose }: { onClose: () => void }) {
             </section>
           )}
 
+          {upNextPicks.length > 0 && (
+            <section className="mt-5">
+              <h3 className="px-1 text-xs font-semibold tracking-wide text-ink-tertiary uppercase">
+                Up Next
+              </h3>
+              <ul className="mt-1">
+                {upNextPicks.map((pick) => (
+                  <li key={pick.book.id}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setView({
+                          kind: "confirmExisting",
+                          book: pick.book,
+                          nextPage: pick.nextPage,
+                        })
+                      }
+                      className="flex w-full cursor-pointer items-center gap-3.5 rounded-xl p-2 text-left active:bg-fill"
+                    >
+                      <BookCover title={pick.book.title} coverUrl={pick.book.coverUrl} size="sm" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[15px] font-medium">{pick.book.title}</p>
+                        <p className="truncate text-sm text-ink-secondary">
+                          {pick.book.authors.join(", ")}
+                        </p>
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           {wantPicks.length > 0 && (
             <section className="mt-5">
               <h3 className="px-1 text-xs font-semibold tracking-wide text-ink-tertiary uppercase">
@@ -224,7 +270,7 @@ function ReadSheetContent({ onClose }: { onClose: () => void }) {
             </section>
           )}
 
-          {picks.length === 0 && wantPicks.length === 0 && loadError === "" && (
+          {picks.length === 0 && upNextPicks.length === 0 && wantPicks.length === 0 && loadError === "" && (
             <div className="px-1 py-8 text-center">
               <p className="text-[15px] font-semibold">지금 읽고 있는 책이 없네요</p>
               <p className="mt-2 text-sm leading-relaxed text-ink-secondary">

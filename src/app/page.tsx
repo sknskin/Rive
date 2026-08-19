@@ -6,7 +6,7 @@ import { motion } from "motion/react";
 import ReadSheet from "@/components/read/ReadSheet";
 import CurrentlyReading from "@/components/today/CurrentlyReading";
 import TodaySessions, { type SessionRow } from "@/components/today/TodaySessions";
-import { dayRange, greetingForDate } from "@/lib/format";
+import { dayRange, formatDurationShort, formatPageRange, greetingForDate } from "@/lib/format";
 import { subscribeLibraryChange } from "@/lib/libraryEvents";
 import { getRepository } from "@/lib/repository";
 import type { Book, UserBook } from "@/lib/types";
@@ -16,11 +16,21 @@ interface CurrentPick {
   userBook: UserBook;
 }
 
+// 과거의 오늘 — 같은 날짜의 지난해 기록 (스펙 §28)
+// On this day — past years' records for the same date (spec §28)
+interface PastToday {
+  yearsAgo: number;
+  rows: SessionRow[];
+}
+
+const PAST_TODAY_MAX_YEARS = 5;
+
 export default function TodayPage() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [current, setCurrent] = useState<CurrentPick | null>(null);
   const [rows, setRows] = useState<SessionRow[]>([]);
+  const [pastToday, setPastToday] = useState<PastToday | null>(null);
   const [loadError, setLoadError] = useState("");
   const [readOpen, setReadOpen] = useState(false);
   const [now, setNow] = useState(() => new Date());
@@ -62,7 +72,8 @@ export default function TodayPage() {
           }
         }
 
-        const { startMs, endMs } = dayRange(new Date());
+        const today = new Date();
+        const { startMs, endMs } = dayRange(today);
         const sessions = await repository.listSessionsByDateRange(startMs, endMs);
         const sessionRows: SessionRow[] = [];
         for (const session of sessions) {
@@ -70,9 +81,32 @@ export default function TodayPage() {
           sessionRows.push({ session, bookTitle: book?.title ?? "알 수 없는 책" });
         }
 
+        // 과거의 오늘 — 가장 최근 연도의 기록 하나만 보여준다 (스펙 §28)
+        // On this day — surface the most recent past year that has records (spec §28)
+        let loadedPast: PastToday | null = null;
+        for (let yearsAgo = 1; yearsAgo <= PAST_TODAY_MAX_YEARS; yearsAgo++) {
+          const pastRange = dayRange(
+            new Date(today.getFullYear() - yearsAgo, today.getMonth(), today.getDate()),
+          );
+          const pastSessions = await repository.listSessionsByDateRange(
+            pastRange.startMs,
+            pastRange.endMs,
+          );
+          if (pastSessions.length > 0) {
+            const pastRows: SessionRow[] = [];
+            for (const session of pastSessions) {
+              const book = await repository.getBook(session.bookId);
+              pastRows.push({ session, bookTitle: book?.title ?? "알 수 없는 책" });
+            }
+            loadedPast = { yearsAgo, rows: pastRows };
+            break;
+          }
+        }
+
         if (!cancelled) {
           setCurrent(pick);
           setRows(sessionRows);
+          setPastToday(loadedPast);
           setLoadError("");
           setReady(true);
         }
@@ -154,6 +188,30 @@ export default function TodayPage() {
                 </p>
               </div>
             )
+          )}
+
+          {pastToday && (
+            <section className="mt-10" aria-label="과거의 오늘">
+              <h2 className="text-xs font-semibold tracking-wide text-ink-tertiary uppercase">
+                {pastToday.yearsAgo}년 전 오늘
+              </h2>
+              <ul className="mt-2 divide-y divide-separator">
+                {pastToday.rows.map(({ session, bookTitle }) => (
+                  <li key={session.id} className="py-3">
+                    <p className="text-[15px] font-medium">{bookTitle}</p>
+                    <p className="nums mt-0.5 text-sm text-ink-secondary">
+                      {formatDurationShort(session.durationSeconds)} ·{" "}
+                      {formatPageRange(session.startPage, session.endPage)}
+                    </p>
+                    {session.memo !== "" && (
+                      <p className="mt-1 text-sm break-keep text-ink-tertiary">
+                        {session.memo}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
           )}
         </div>
       </div>

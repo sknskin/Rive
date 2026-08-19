@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import BookCover from "@/components/BookCover";
@@ -30,6 +30,35 @@ function isBookStatus(value: string | null): value is BookStatus {
   return value !== null && (STATUS_ORDER as string[]).includes(value);
 }
 
+// 그리드/리스트 뷰 선택 — localStorage에 저장, SSR은 grid 기본 (스펙 §21)
+// Grid/list view choice — persisted in localStorage, grid default on SSR (spec §21)
+const LIBRARY_VIEW_KEY = "rive-library-view";
+const LIBRARY_VIEW_EVENT = "rive-library-view-change";
+type LibraryView = "grid" | "list";
+
+function subscribeLibraryView(callback: () => void): () => void {
+  window.addEventListener(LIBRARY_VIEW_EVENT, callback);
+  return () => window.removeEventListener(LIBRARY_VIEW_EVENT, callback);
+}
+
+function getStoredLibraryView(): LibraryView {
+  try {
+    return localStorage.getItem(LIBRARY_VIEW_KEY) === "list" ? "list" : "grid";
+  } catch (error) {
+    console.error("[Library] failed to read view preference:", error);
+    return "grid";
+  }
+}
+
+function setStoredLibraryView(view: LibraryView): void {
+  try {
+    localStorage.setItem(LIBRARY_VIEW_KEY, view);
+    window.dispatchEvent(new Event(LIBRARY_VIEW_EVENT));
+  } catch (error) {
+    console.error("[Library] failed to save view preference:", error);
+  }
+}
+
 function LibraryContent() {
   const searchParams = useSearchParams();
   // ?status=want 등으로 진입하면 해당 탭을 초기 선택한다 (추천 → 서재 이동 경로)
@@ -38,6 +67,7 @@ function LibraryContent() {
   const [status, setStatus] = useState<BookStatus>(
     isBookStatus(statusParam) ? statusParam : "reading",
   );
+  const view = useSyncExternalStore(subscribeLibraryView, getStoredLibraryView, () => "grid");
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -85,7 +115,28 @@ function LibraryContent() {
 
   return (
     <main className="flex-1 px-5 pt-8 pb-20">
-      <h1 className="text-2xl font-bold tracking-tight">Library</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold tracking-tight">Library</h1>
+        <button
+          type="button"
+          aria-label={view === "grid" ? "리스트로 보기" : "그리드로 보기"}
+          onClick={() => setStoredLibraryView(view === "grid" ? "list" : "grid")}
+          className="flex size-9 cursor-pointer items-center justify-center rounded-full text-ink-tertiary transition-colors duration-150 hover:bg-fill hover:text-ink active:bg-fill"
+        >
+          {view === "grid" ? (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
+              <path d="M4 6.5h16M4 12h16M4 17.5h16" />
+            </svg>
+          ) : (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+              <rect x="4" y="4" width="7" height="7" rx="1.5" />
+              <rect x="13" y="4" width="7" height="7" rx="1.5" />
+              <rect x="4" y="13" width="7" height="7" rx="1.5" />
+              <rect x="13" y="13" width="7" height="7" rx="1.5" />
+            </svg>
+          )}
+        </button>
+      </div>
 
       <div className="scrollbar-none -mx-5 mt-4 flex gap-2 overflow-x-auto px-5">
         {STATUS_ORDER.map((candidate) => {
@@ -133,18 +184,44 @@ function LibraryContent() {
         </div>
       )}
 
-      <div className="mt-6 grid grid-cols-3 gap-x-4 gap-y-6 md:grid-cols-4 lg:grid-cols-6">
-        {items.map(({ book }) => (
-          <Link key={book.id} href={`/library/${book.id}`} className="group">
-            <div className="transition-transform duration-150 group-active:scale-95">
-              <BookCover title={book.title} coverUrl={book.coverUrl} size="fluid" />
-            </div>
-            <p className="mt-2 line-clamp-2 text-xs leading-snug font-medium break-keep">
-              {book.title}
-            </p>
-          </Link>
-        ))}
-      </div>
+      {view === "grid" ? (
+        <div className="mt-6 grid grid-cols-3 gap-x-4 gap-y-6 md:grid-cols-4 lg:grid-cols-6">
+          {items.map(({ book }) => (
+            <Link key={book.id} href={`/library/${book.id}`} className="group">
+              <div className="transition-transform duration-150 group-active:scale-95">
+                <BookCover title={book.title} coverUrl={book.coverUrl} size="fluid" />
+              </div>
+              <p className="mt-2 line-clamp-2 text-xs leading-snug font-medium break-keep">
+                {book.title}
+              </p>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <ul className="mt-4 divide-y divide-separator">
+          {items.map(({ book, userBook }) => (
+            <li key={book.id}>
+              <Link
+                href={`/library/${book.id}`}
+                className="flex items-center gap-3.5 py-3 active:opacity-70"
+              >
+                <BookCover title={book.title} coverUrl={book.coverUrl} size="sm" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[15px] font-medium">{book.title}</p>
+                  <p className="truncate text-sm text-ink-secondary">
+                    {book.authors.join(", ")}
+                  </p>
+                </div>
+                {userBook.currentPage > 0 && (
+                  <span className="nums shrink-0 text-sm text-ink-tertiary">
+                    p.{userBook.currentPage}
+                  </span>
+                )}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
     </main>
   );
 }
