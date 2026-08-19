@@ -5,6 +5,7 @@ import Link from "next/link";
 import PageSkeleton from "@/components/PageSkeleton";
 import { useSearchParams } from "next/navigation";
 import BookCover from "@/components/BookCover";
+import BottomSheet from "@/components/BottomSheet";
 import { STATUS_LABELS, STATUS_ORDER } from "@/lib/constants";
 import { subscribeLibraryChange } from "@/lib/libraryEvents";
 import { getRepository } from "@/lib/repository";
@@ -60,6 +61,10 @@ function setStoredLibraryView(view: LibraryView): void {
   }
 }
 
+// 최소 별점 필터 선택지 — 0은 전체 (스펙 §21 장르·저자·평점 필터)
+// Minimum-rating filter options — 0 means all (spec §21)
+const MIN_RATING_OPTIONS = [0, 3, 4, 5] as const;
+
 function LibraryContent() {
   const searchParams = useSearchParams();
   // ?status=want 등으로 진입하면 해당 탭을 초기 선택한다 (추천 → 서재 이동 경로)
@@ -73,6 +78,25 @@ function LibraryContent() {
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
+  // 장르·저자·평점 필터 (스펙 §21) — 즉시 적용형, 탭 전환 시 초기화
+  // Genre/author/rating filters (spec §21) — applied live, reset on tab change
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
+  const [selectedAuthors, setSelectedAuthors] = useState<string[]>([]);
+  const [minRating, setMinRating] = useState(0);
+
+  function clearFilters() {
+    setSelectedGenres([]);
+    setSelectedAuthors([]);
+    setMinRating(0);
+  }
+
+  function handleStatusChange(next: BookStatus) {
+    setStatus(next);
+    // 탭마다 장르/저자 구성이 달라 이전 선택이 무의미해진다
+    // Each tab has different genres/authors, so stale picks are cleared
+    clearFilters();
+  }
 
   // 전역 + 버튼으로 책이 추가되면 이동 없이 목록을 갱신한다
   // Refresh in place when a book is added via the global + button
@@ -119,6 +143,41 @@ function LibraryContent() {
     };
   }, [status, reloadKey]);
 
+  // 필터 선택지는 현재 탭의 책들에서 수집한다
+  // Filter options are gathered from the current tab's books
+  const genreOptions = [...new Set(items.flatMap(({ book }) => book.categories ?? []))].sort();
+  const authorOptions = [...new Set(items.flatMap(({ book }) => book.authors))].sort();
+  const activeFilterCount =
+    selectedGenres.length + selectedAuthors.length + (minRating > 0 ? 1 : 0);
+
+  const filteredItems = items.filter(({ book, userBook }) => {
+    if (
+      selectedGenres.length > 0 &&
+      !(book.categories ?? []).some((category) => selectedGenres.includes(category))
+    ) {
+      return false;
+    }
+    if (
+      selectedAuthors.length > 0 &&
+      !book.authors.some((author) => selectedAuthors.includes(author))
+    ) {
+      return false;
+    }
+    if (minRating > 0 && (userBook.rating ?? 0) < minRating) {
+      return false;
+    }
+    return true;
+  });
+
+  function toggleValue(list: string[], setList: (next: string[]) => void, value: string) {
+    setList(list.includes(value) ? list.filter((item) => item !== value) : [...list, value]);
+  }
+
+  const filterChipClass = (selected: boolean) =>
+    `cursor-pointer rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors duration-150 ${
+      selected ? "bg-accent text-accent-ink" : "bg-fill text-ink-secondary"
+    }`;
+
   return (
     <main className="flex-1 px-5 pt-8 pb-20">
       <div className="flex items-center justify-between">
@@ -152,7 +211,7 @@ function LibraryContent() {
               key={candidate}
               type="button"
               aria-pressed={active}
-              onClick={() => setStatus(candidate)}
+              onClick={() => handleStatusChange(candidate)}
               className={`shrink-0 cursor-pointer rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors duration-150 ${
                 active ? "bg-accent text-accent-ink" : "bg-fill text-ink-secondary"
               }`}
@@ -161,6 +220,22 @@ function LibraryContent() {
             </button>
           );
         })}
+        {/* 장르·저자·평점 필터 진입점 — 걸린 필터 수를 함께 표시 (스펙 §21) */}
+        {/* Filter entry showing the active-filter count (spec §21) */}
+        {(genreOptions.length > 0 || authorOptions.length > 0 || items.length > 0) && (
+          <button
+            type="button"
+            aria-pressed={activeFilterCount > 0}
+            onClick={() => setFilterSheetOpen(true)}
+            className={`shrink-0 cursor-pointer rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors duration-150 ${
+              activeFilterCount > 0
+                ? "bg-tint text-white"
+                : "bg-fill text-ink-secondary"
+            }`}
+          >
+            필터{activeFilterCount > 0 ? ` ${activeFilterCount}` : ""}
+          </button>
+        )}
       </div>
 
       {loadError !== "" && <p className="mt-8 text-sm text-danger">{loadError}</p>}
@@ -191,9 +266,24 @@ function LibraryContent() {
         </div>
       )}
 
+      {/* 필터 결과가 비었을 때는 서재 빈 상태와 구분되는 안내를 준다 */}
+      {/* Distinct message when filters match nothing (vs an empty shelf) */}
+      {ready && loadError === "" && items.length > 0 && filteredItems.length === 0 && (
+        <div className="mt-24 text-center">
+          <p className="text-[17px] font-semibold tracking-tight">조건에 맞는 책이 없어요</p>
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="mt-3 cursor-pointer text-sm font-medium text-tint active:opacity-70"
+          >
+            필터 초기화
+          </button>
+        </div>
+      )}
+
       {view === "grid" ? (
         <div className="mt-6 grid grid-cols-3 gap-x-4 gap-y-6 md:grid-cols-4 lg:grid-cols-6">
-          {items.map(({ book }) => (
+          {filteredItems.map(({ book }) => (
             <Link key={book.id} href={`/library/${book.id}`} className="group">
               <div className="transition-transform duration-150 group-active:scale-95">
                 <BookCover title={book.title} coverUrl={book.coverUrl} size="fluid" />
@@ -206,7 +296,7 @@ function LibraryContent() {
         </div>
       ) : (
         <ul className="mt-4 divide-y divide-separator">
-          {items.map(({ book, userBook }) => (
+          {filteredItems.map(({ book, userBook }) => (
             <li key={book.id}>
               <Link
                 href={`/library/${book.id}`}
@@ -229,6 +319,94 @@ function LibraryContent() {
           ))}
         </ul>
       )}
+
+      <BottomSheet
+        open={filterSheetOpen}
+        onClose={() => setFilterSheetOpen(false)}
+        label="서재 필터"
+      >
+        <div className="px-2 pt-1">
+          {genreOptions.length > 0 && (
+            <>
+              <h2 className="px-1 text-xs font-semibold tracking-wide text-ink-tertiary uppercase">
+                장르
+              </h2>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {genreOptions.map((genre) => (
+                  <button
+                    key={genre}
+                    type="button"
+                    aria-pressed={selectedGenres.includes(genre)}
+                    onClick={() => toggleValue(selectedGenres, setSelectedGenres, genre)}
+                    className={filterChipClass(selectedGenres.includes(genre))}
+                  >
+                    {genre}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {authorOptions.length > 0 && (
+            <>
+              <h2 className="mt-4 px-1 text-xs font-semibold tracking-wide text-ink-tertiary uppercase">
+                저자
+              </h2>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {authorOptions.map((author) => (
+                  <button
+                    key={author}
+                    type="button"
+                    aria-pressed={selectedAuthors.includes(author)}
+                    onClick={() => toggleValue(selectedAuthors, setSelectedAuthors, author)}
+                    className={filterChipClass(selectedAuthors.includes(author))}
+                  >
+                    {author}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          <h2 className="mt-4 px-1 text-xs font-semibold tracking-wide text-ink-tertiary uppercase">
+            별점
+          </h2>
+          <div className="mt-2 grid grid-cols-4 gap-1.5">
+            {MIN_RATING_OPTIONS.map((option) => (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={minRating === option}
+                onClick={() => setMinRating(option)}
+                className={`cursor-pointer rounded-xl px-2 py-2 text-[13px] font-medium transition-colors duration-150 ${
+                  minRating === option ? "bg-accent text-accent-ink" : "bg-fill text-ink-secondary"
+                }`}
+              >
+                {option === 0 ? "전체" : `★${option} 이상`}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-5 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setFilterSheetOpen(false)}
+              className="flex-1 cursor-pointer rounded-xl bg-accent py-2.5 text-[15px] font-semibold text-accent-ink"
+            >
+              {filteredItems.length}권 보기
+            </button>
+            {activeFilterCount > 0 && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="shrink-0 cursor-pointer px-2 py-2 text-[13px] font-medium text-ink-tertiary transition-colors duration-150 hover:text-ink active:opacity-70"
+              >
+                초기화
+              </button>
+            )}
+          </div>
+        </div>
+      </BottomSheet>
     </main>
   );
 }
