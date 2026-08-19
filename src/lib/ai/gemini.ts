@@ -23,10 +23,15 @@ interface GeminiResponse {
   }[];
 }
 
-export async function generateJson<T>(
+// 텍스트 파트와 이미지(inlineData) 파트를 함께 보낼 수 있는 공통 요청부
+// Shared request body builder supporting text and inline-image parts
+type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } };
+
+async function requestJson<T>(
   apiKey: string,
-  prompt: string,
+  parts: GeminiPart[],
   schema: GeminiSchema,
+  temperature: number,
 ): Promise<T> {
   const url = `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
 
@@ -34,9 +39,9 @@ export async function generateJson<T>(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
+      contents: [{ parts }],
       generationConfig: {
-        temperature: GEMINI_TEMPERATURE,
+        temperature,
         responseMimeType: "application/json",
         responseSchema: schema,
       },
@@ -60,4 +65,31 @@ export async function generateJson<T>(
     console.error("[gemini] failed to parse JSON response:", parseError);
     throw new Error("gemini returned invalid JSON");
   }
+}
+
+export async function generateJson<T>(
+  apiKey: string,
+  prompt: string,
+  schema: GeminiSchema,
+): Promise<T> {
+  return requestJson<T>(apiKey, [{ text: prompt }], schema, GEMINI_TEMPERATURE);
+}
+
+// 이미지 → 구조화 응답 — 인용구 사진 OCR에 사용, 추출 작업이라 온도를 낮게 둔다 (리서치)
+// Image → structured output for quote-photo OCR; low temperature for extraction
+const GEMINI_OCR_TEMPERATURE = 0.1;
+
+export async function generateJsonFromImage<T>(
+  apiKey: string,
+  prompt: string,
+  schema: GeminiSchema,
+  imageBase64: string,
+  mimeType: string,
+): Promise<T> {
+  return requestJson<T>(
+    apiKey,
+    [{ inlineData: { mimeType, data: imageBase64 } }, { text: prompt }],
+    schema,
+    GEMINI_OCR_TEMPERATURE,
+  );
 }
