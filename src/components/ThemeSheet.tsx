@@ -1,8 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
+import AccountSection from "@/components/AccountSection";
 import BottomSheet from "@/components/BottomSheet";
 import { exportAllData, importAllData } from "@/lib/dataTransfer";
+import { isServerMode } from "@/lib/supabase/client";
 import { applyTheme, getStoredTheme, THEME_OPTIONS, type ThemeMode } from "@/lib/theme";
 
 interface ThemeSheetProps {
@@ -64,42 +66,63 @@ function ThemeSheetContent({ onClose }: { onClose: () => void }) {
   }
 
   return (
+    // 시트 내부 스크롤이 생기지 않도록 섹션 라벨·간격을 압축한 세로 구성 (사용자 요청)
+    // Compact vertical layout so the sheet never needs internal scrolling
     <div className="px-2">
-      <h2 className="px-1 pt-2 text-lg font-semibold tracking-tight">화면 모드</h2>
-      <ul className="mt-3">
-        {THEME_OPTIONS.map((option) => (
-          <li key={option.value}>
-            <button
-              type="button"
-              onClick={() => handleSelect(option.value)}
-              className="flex w-full cursor-pointer items-center justify-between rounded-xl px-3 py-3.5 text-left text-[15px] font-medium active:bg-fill"
-            >
-              {option.label}
-              {option.value === mode && <span className="text-tint">✓</span>}
-            </button>
-          </li>
-        ))}
-      </ul>
+      <h2 className="px-1 pt-1 text-xs font-semibold tracking-wide text-ink-tertiary uppercase">
+        계정
+      </h2>
+      <AccountSection />
 
-      <h2 className="mt-4 border-t border-separator px-1 pt-4 text-lg font-semibold tracking-tight">
+      <h2 className="mt-4 border-t border-separator px-1 pt-3 text-xs font-semibold tracking-wide text-ink-tertiary uppercase">
+        화면 모드
+      </h2>
+      {/* 3행 목록 대신 가로 세그먼트 — 세로 공간 절약 */}
+      {/* Horizontal segmented control instead of three rows — saves height */}
+      <div className="mt-2 grid grid-cols-3 gap-1.5">
+        {THEME_OPTIONS.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={option.value === mode}
+            onClick={() => handleSelect(option.value)}
+            className={`cursor-pointer rounded-xl px-2 py-2.5 text-[13px] font-medium transition-colors duration-150 ${
+              option.value === mode
+                ? "bg-accent text-accent-ink"
+                : "bg-fill text-ink-secondary"
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+
+      <h2 className="mt-4 border-t border-separator px-1 pt-3 text-xs font-semibold tracking-wide text-ink-tertiary uppercase">
         데이터
       </h2>
-      <div className="mt-3 flex flex-col gap-2">
+      {/* 서버 모드에서는 백업 대상이 로컬 기록임을 명시해 혼동을 막는다 (2차 B6) */}
+      {/* In server mode, clarify that backup targets this device's local records (B6) */}
+      {isServerMode() && (
+        <p className="mt-1 px-1 text-[11px] leading-relaxed text-ink-tertiary">
+          내보내기·가져오기는 이 기기의 로컬 기록을 다뤄요. 계정 기록은 서버에 저장돼 있어요.
+        </p>
+      )}
+      <div className="mt-2 grid grid-cols-2 gap-1.5">
         <button
           type="button"
           disabled={busy}
           onClick={() => void handleExport()}
-          className="w-full cursor-pointer rounded-xl px-3 py-3.5 text-left text-[15px] font-medium active:bg-fill disabled:opacity-40"
+          className="cursor-pointer rounded-xl bg-fill px-2 py-2.5 text-[13px] font-medium text-ink-secondary active:opacity-70 disabled:opacity-40"
         >
-          데이터 내보내기 (JSON)
+          내보내기 (JSON)
         </button>
         <button
           type="button"
           disabled={busy}
           onClick={() => fileInputRef.current?.click()}
-          className="w-full cursor-pointer rounded-xl px-3 py-3.5 text-left text-[15px] font-medium active:bg-fill disabled:opacity-40"
+          className="cursor-pointer rounded-xl bg-fill px-2 py-2.5 text-[13px] font-medium text-ink-secondary active:opacity-70 disabled:opacity-40"
         >
-          데이터 가져오기
+          가져오기
         </button>
         <input
           ref={fileInputRef}
