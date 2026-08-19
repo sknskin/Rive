@@ -96,8 +96,12 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* iOS safe area 하단 여백 (홈 인디케이터) */
-/* Bottom padding for iOS safe area (home indicator) */
-.pb-safe {
-  padding-bottom: env(safe-area-inset-bottom);
+/* iOS safe area(홈 인디케이터)를 가산한 하단 여백 — Tailwind pb-*와 함께 쓰지 않는다 */
+/* Bottom padding including iOS safe area — never combine with Tailwind pb-* */
+.pb-safe-4 {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 1rem);
+}
+
+.pb-safe-10 {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 2.5rem);
 }

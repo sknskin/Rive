@@ -1,41 +1,46 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { AnimatePresence, motion } from "motion/react";
+import AddBookSheet from "@/components/AddBookSheet";
+import ThemeButton from "@/components/ThemeButton";
+import ThemeSheet from "@/components/ThemeSheet";
 
-// 하단 탭 정의 — 1차에서는 Today/Calendar만 활성화한다
-// Bottom tab definition — only Today/Calendar are enabled in phase 1
-interface TabItem {
+// 내비게이션 항목 — 데스크톱은 상단 탭, 모바일은 햄버거 드로어로 노출한다
+// Navigation items — top tabs on desktop, hamburger drawer on mobile
+interface NavItem {
   href: string;
   label: string;
-  enabled: boolean;
-  icon: React.ReactNode;
 }
 
+const NAV_ITEMS: NavItem[] = [
+  { href: "/", label: "Today" },
+  { href: "/calendar", label: "Calendar" },
+  { href: "/library", label: "Library" },
+  { href: "/discover", label: "Discover" },
+  { href: "/insights", label: "Insights" },
+];
+
 const ICON_STROKE_WIDTH = 1.7;
+const DRAWER_SPRING = { type: "spring", stiffness: 400, damping: 38 } as const;
 
 function iconProps(active: boolean) {
   return {
-    width: 24,
-    height: 24,
+    width: 22,
+    height: 22,
     viewBox: "0 0 24 24",
     fill: "none",
     stroke: "currentColor",
     strokeWidth: active ? ICON_STROKE_WIDTH + 0.5 : ICON_STROKE_WIDTH,
     strokeLinecap: "round" as const,
     strokeLinejoin: "round" as const,
+    "aria-hidden": true,
   };
 }
 
-const TABS: Omit<TabItem, "icon">[] = [
-  { href: "/", label: "Today", enabled: true },
-  { href: "/calendar", label: "Calendar", enabled: true },
-  { href: "/library", label: "Library", enabled: true },
-  { href: "/discover", label: "Discover", enabled: true },
-  { href: "/insights", label: "Insights", enabled: true },
-];
-
-function TabIcon({ href, active }: { href: string; active: boolean }) {
+function NavIcon({ href, active }: { href: string; active: boolean }) {
   switch (href) {
     case "/":
       return (
@@ -77,59 +82,185 @@ function TabIcon({ href, active }: { href: string; active: boolean }) {
   }
 }
 
+function isNavActive(pathname: string, item: NavItem): boolean {
+  // 하위 경로(/library/[id] 등)에서도 해당 항목을 활성으로 표시한다
+  // Keep the item active on nested routes such as /library/[id]
+  return pathname === item.href || (item.href !== "/" && pathname.startsWith(`${item.href}/`));
+}
+
+// 전역 책 추가 버튼 아이콘 (+)
+// Global add-book button icon (+)
+function PlusIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      aria-hidden
+    >
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
 export default function TabBar() {
   const pathname = usePathname();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [themeOpen, setThemeOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
 
-  // Reading Mode는 몰입 화면이므로 탭바를 숨긴다
-  // Reading Mode is immersive, so hide the tab bar there
+  // Reading Mode는 몰입 화면이므로 내비게이션을 숨긴다
+  // Reading Mode is immersive, so hide navigation there
   if (pathname.startsWith("/read")) {
     return null;
   }
 
+  function openThemeSheet() {
+    // 드로어 위에 시트가 겹치지 않도록 먼저 닫는다
+    // Close the drawer first so the sheet doesn't stack on top of it
+    setMenuOpen(false);
+    setThemeOpen(true);
+  }
+
   return (
-    <nav
-      aria-label="주요 메뉴"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-separator bg-elevated/80 backdrop-blur-xl"
-    >
-      <div className="pb-safe mx-auto flex w-full max-w-lg items-stretch">
-        {TABS.map((tab) => {
-          // 하위 경로(/library/[id] 등)에서도 해당 탭을 활성으로 표시한다
-          // Keep the tab active on nested routes such as /library/[id]
-          const active =
-            tab.enabled &&
-            (pathname === tab.href ||
-              (tab.href !== "/" && pathname.startsWith(`${tab.href}/`)));
-
-          if (!tab.enabled) {
+    <>
+      {/* 데스크톱/태블릿: 상단 바 — 가운데 탭, 우측 끝 테마 아이콘 */}
+      {/* Desktop/tablet: top bar — centered tabs, theme icon at the far right */}
+      <nav
+        aria-label="주요 메뉴"
+        className="fixed inset-x-0 top-0 z-40 hidden border-b border-separator bg-elevated/80 backdrop-blur-xl md:block"
+      >
+        <div className="relative mx-auto flex h-12 w-full max-w-3xl items-center justify-center gap-1 px-4 lg:max-w-5xl">
+          {NAV_ITEMS.map((item) => {
+            const active = isNavActive(pathname, item);
             return (
-              <div
-                key={tab.href}
-                aria-disabled="true"
-                title="준비 중이에요"
-                className="flex flex-1 cursor-default flex-col items-center gap-0.5 pt-2 pb-1.5 text-ink-tertiary/60"
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] transition-colors duration-200 ${
+                  active
+                    ? "bg-fill font-semibold text-ink"
+                    : "font-medium text-ink-tertiary hover:text-ink-secondary"
+                }`}
               >
-                <TabIcon href={tab.href} active={false} />
-                <span className="text-[10px] font-medium">{tab.label}</span>
-              </div>
+                <NavIcon href={item.href} active={active} />
+                {item.label}
+              </Link>
             );
-          }
-
-          return (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              className={`flex flex-1 flex-col items-center gap-0.5 pt-2 pb-1.5 transition-colors duration-200 ${
-                active ? "text-ink" : "text-ink-tertiary"
-              }`}
+          })}
+          <div className="absolute right-2 flex items-center gap-0.5">
+            <button
+              type="button"
+              aria-label="책 추가"
+              title="책 추가"
+              onClick={() => setAddOpen(true)}
+              className="flex size-10 cursor-pointer items-center justify-center rounded-full text-ink-tertiary transition-colors duration-200 hover:bg-fill hover:text-ink active:bg-fill"
             >
-              <TabIcon href={tab.href} active={active} />
-              <span className={`text-[10px] ${active ? "font-semibold" : "font-medium"}`}>
-                {tab.label}
-              </span>
-            </Link>
-          );
-        })}
-      </div>
-    </nav>
+              <PlusIcon />
+            </button>
+            <ThemeButton onClick={openThemeSheet} />
+          </div>
+        </div>
+      </nav>
+
+      {/* 모바일: 최상단 바 — 좌측 햄버거 + 워드마크 */}
+      {/* Mobile: top bar — hamburger on the left plus wordmark */}
+      <header className="fixed inset-x-0 top-0 z-40 border-b border-separator bg-elevated/80 backdrop-blur-xl md:hidden">
+        <div className="flex h-12 items-center gap-1 px-2">
+          <button
+            type="button"
+            aria-label="메뉴 열기"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen(true)}
+            className="flex size-10 cursor-pointer items-center justify-center rounded-full text-ink transition-colors duration-200 active:bg-fill"
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              aria-hidden
+            >
+              <path d="M4 6.5h16M4 12h16M4 17.5h16" />
+            </svg>
+          </button>
+          <span className="text-[17px] font-bold tracking-tight">Rive</span>
+          <button
+            type="button"
+            aria-label="책 추가"
+            onClick={() => setAddOpen(true)}
+            className="ml-auto flex size-10 cursor-pointer items-center justify-center rounded-full text-ink transition-colors duration-200 active:bg-fill"
+          >
+            <PlusIcon />
+          </button>
+        </div>
+      </header>
+
+      {/* 모바일 드로어 메뉴 — 최하단에 테마 아이콘 */}
+      {/* Mobile drawer menu — theme icon pinned at the bottom */}
+      <AnimatePresence>
+        {menuOpen && (
+          <div className="fixed inset-0 z-50 md:hidden">
+            <motion.button
+              aria-label="메뉴 닫기"
+              className="absolute inset-0 bg-black/40"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setMenuOpen(false)}
+            />
+            <motion.aside
+              role="dialog"
+              aria-modal="true"
+              aria-label="메뉴"
+              className="pb-safe-4 absolute inset-y-0 left-0 flex w-72 max-w-[80%] flex-col bg-elevated px-3 pt-5 shadow-2xl"
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={DRAWER_SPRING}
+            >
+              <p className="px-3 text-xl font-bold tracking-tight">Rive</p>
+
+              <ul className="mt-5 flex flex-col gap-0.5">
+                {NAV_ITEMS.map((item) => {
+                  const active = isNavActive(pathname, item);
+                  return (
+                    <li key={item.href}>
+                      <Link
+                        href={item.href}
+                        onClick={() => setMenuOpen(false)}
+                        className={`flex items-center gap-3 rounded-xl px-3 py-3 text-[15px] transition-colors duration-150 ${
+                          active
+                            ? "bg-fill font-semibold text-ink"
+                            : "font-medium text-ink-secondary active:bg-fill"
+                        }`}
+                      >
+                        <NavIcon href={item.href} active={active} />
+                        {item.label}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+
+              <div className="mt-auto flex items-center justify-between border-t border-separator px-1 pt-3">
+                <span className="px-2 text-sm font-medium text-ink-tertiary">화면 모드</span>
+                <ThemeButton onClick={openThemeSheet} />
+              </div>
+            </motion.aside>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <ThemeSheet open={themeOpen} onClose={() => setThemeOpen(false)} />
+      <AddBookSheet open={addOpen} onClose={() => setAddOpen(false)} />
+    </>
   );
 }
