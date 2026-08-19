@@ -34,7 +34,10 @@ export default function EndPageSheet({
 }: EndPageSheetProps) {
   const [pageText, setPageText] = useState("");
   const [memo, setMemo] = useState("");
-  const [markAsRead, setMarkAsRead] = useState(true);
+  // 페이지 수를 아는 책은 끝 도달 시 자동 체크가 자연스럽지만,
+  // 페이지 수가 없는 책은 사용자가 직접 체크해야 하므로 기본값을 해제로 둔다
+  // Auto-check suits books with a known page count; unknown-count books default to unchecked
+  const [markAsRead, setMarkAsRead] = useState(pageCount > 0);
   // 오조작 방지 — 첫 탭은 확인 문구로 전환, 두 번째 탭에 실제 폐기
   // Two-tap guard — first tap arms the confirmation, second tap discards
   const [discardArmed, setDiscardArmed] = useState(false);
@@ -42,9 +45,12 @@ export default function EndPageSheet({
   const parsed = Number.parseInt(pageText, 10);
   const validPage = Number.isFinite(parsed) && parsed >= startPage;
   const reachedEnd = validPage && pageCount > 0 && parsed >= pageCount;
+  // 페이지 수 정보가 없는 책도 완독 처리 경로가 있어야 한다 (5차 조사 M7)
+  // Books without page-count metadata still need a path to mark-as-read (audit 5 M7)
+  const canMarkAsRead = reachedEnd || (validPage && pageCount === 0);
 
   return (
-    <BottomSheet open={open} onClose={onClose}>
+    <BottomSheet open={open} onClose={onClose} label="독서 기록 저장">
       <div className="px-2 pt-2 text-center">
         <h2 className="text-lg font-semibold tracking-tight">독서를 마쳤어요.</h2>
         <p className="nums mt-3 text-3xl font-light">{formatDurationShort(durationSeconds)}</p>
@@ -71,7 +77,7 @@ export default function EndPageSheet({
             </p>
           )}
 
-          {reachedEnd && (
+          {canMarkAsRead && (
             <label className="mt-4 flex items-center justify-between rounded-xl bg-fill px-4 py-3">
               <span className="text-[15px] font-medium">이 책을 다 읽었어요</span>
               <input
@@ -102,10 +108,10 @@ export default function EndPageSheet({
             onSave({
               endPage: parsed,
               memo: memo.trim(),
-              markAsRead: reachedEnd && markAsRead,
+              markAsRead: canMarkAsRead && markAsRead,
             })
           }
-          className="mt-6 w-full rounded-2xl bg-accent py-4 text-lg font-semibold text-accent-ink disabled:opacity-40"
+          className="mt-6 w-full cursor-pointer rounded-2xl bg-accent py-4 text-lg font-semibold tracking-wide text-accent-ink shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
         >
           {saving ? "저장하는 중…" : "저장"}
         </motion.button>
