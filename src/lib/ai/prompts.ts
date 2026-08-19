@@ -74,6 +74,7 @@ export function buildProfilePrompt(request: ProfileRequest): string {
     "규칙:",
     "- 반드시 제공된 데이터에서만 근거(evidence)를 인용한다. 데이터를 지어내지 않는다.",
     "- 실제 독서 행동(완독, 중단, 별점)이 설문 답변보다 중요하다. 나이/성별은 있어도 가장 낮은 가중치로만 쓴다.",
+    "- extraRatings는 완독 후 추가 평가로, fun(재미)·immersion(몰입도)·difficulty(난이도) 각각 1~5점이다. fun/immersion은 높을수록 만족을 뜻하고, difficulty는 높을수록 어려웠다는 뜻일 뿐 선호도가 아니다.",
     "- 모든 텍스트는 자연스러운 한국어로 쓴다. 부정적이거나 압박하는 표현은 피한다.",
     "- genres는 선호 상위 3~6개 장르만 담는다.",
     "- tasteChanges는 시간에 따른 변화가 데이터로 보일 때만 쓴다(없으면 빈 배열).",

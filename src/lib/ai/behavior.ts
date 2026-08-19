@@ -20,9 +20,15 @@ export async function collectBehaviorSnapshot(): Promise<BehaviorSnapshot> {
   const userBooks = await repository.listUserBooks();
   const sessions = await repository.listAllSessions();
 
+  // 책마다 개별 조회하지 않고 한 번에 가져온다 — N+1 방지 (6차 조사 D3)
+  // Fetch all books at once instead of per-book lookups — avoids N+1 (audit 6 D3)
+  const booksById = await repository.listBooksByIds(
+    userBooks.map((userBook) => userBook.bookId),
+  );
+
   const books: BehaviorBookEntry[] = [];
   for (const userBook of userBooks) {
-    const book = await repository.getBook(userBook.bookId);
+    const book = booksById.get(userBook.bookId);
     if (!book) {
       continue;
     }
@@ -34,6 +40,11 @@ export async function collectBehaviorSnapshot(): Promise<BehaviorSnapshot> {
         ? { rating: userBook.rating }
         : {}),
       ...(userBook.dnfReason ? { dnfReason: userBook.dnfReason } : {}),
+      // 완독 추가 평가가 있으면 취향 분석 신호로 함께 보낸다 (스펙 §25)
+      // Include extra finish ratings as taste signals when present (spec §25)
+      ...(userBook.extraRatings && Object.keys(userBook.extraRatings).length > 0
+        ? { extraRatings: userBook.extraRatings }
+        : {}),
     });
   }
 
@@ -87,8 +98,11 @@ export async function collectExcludeTitles(): Promise<string[]> {
   const titles: string[] = [];
 
   const userBooks = await repository.listUserBooks();
+  const booksById = await repository.listBooksByIds(
+    userBooks.map((userBook) => userBook.bookId),
+  );
   for (const userBook of userBooks) {
-    const book = await repository.getBook(userBook.bookId);
+    const book = booksById.get(userBook.bookId);
     if (book) {
       titles.push(book.title);
     }

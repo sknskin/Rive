@@ -11,6 +11,9 @@ export interface BehaviorBookEntry {
   status: BookStatus;
   rating?: number;
   dnfReason?: string;
+  // 완독 추가 평가 — 재미/몰입도/난이도 (스펙 §25 취향 분석 입력)
+  // Extra finish ratings — fun/immersion/difficulty (spec §25 taste-analysis input)
+  extraRatings?: { fun?: number; immersion?: number; difficulty?: number };
 }
 
 export interface BehaviorSnapshot {
