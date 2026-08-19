@@ -69,7 +69,20 @@ export default function AccountSection() {
   // 로그인 성공 공통 처리 — 로컬 기록이 있으면 이관을 먼저 묻는다 (설계 §4)
   // Shared sign-in success path — offers migration first when local data exists
   async function enterServerMode(signedInEmail: string, userId: string) {
-    setServerMode(true);
+    // 플래그 저장 실패 시 진행하지 않는다 — 리로드 루프 방지 (7차 D2)
+    // Abort when the flag cannot be persisted — prevents reload loops (audit 7 D2)
+    if (!setServerMode(true)) {
+      setErrorText(
+        "이 브라우저에서는 로그인 상태를 저장할 수 없어요. 프라이빗 모드가 아닌지 확인해 주세요.",
+      );
+      try {
+        await getSupabase().auth.signOut();
+      } catch (signOutError) {
+        console.error("[Account] sign out after flag failure:", signOutError);
+      }
+      setBusy(false);
+      return;
+    }
     const migratable = !isLocalMigrated(userId) && (await hasLocalData());
     if (migratable) {
       setUserEmail(signedInEmail);
@@ -215,6 +228,18 @@ export default function AccountSection() {
         >
           나중에 할게요
         </button>
+        {/* 이관 실패 시 빈 서재에 갇히지 않도록 로컬 모드 복귀 경로 제공 (7차 D3) */}
+        {/* Escape hatch back to local mode after a failed migration (audit 7 D3) */}
+        {errorText !== "" && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void handleSignOut()}
+            className="mt-1 w-full cursor-pointer py-1.5 text-sm font-medium text-danger active:opacity-70 disabled:opacity-40"
+          >
+            로그아웃하고 로컬 모드로 돌아가기
+          </button>
+        )}
       </div>
     );
   }

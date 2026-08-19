@@ -38,15 +38,19 @@ export function isServerMode(): boolean {
   }
 }
 
-export function setServerMode(enabled: boolean): void {
+// 성공 여부를 반환한다 — 저장소 쓰기가 막힌 브라우저에서 리로드 루프를 막기 위함 (7차 D2)
+// Returns success so callers can avoid reload loops when storage writes are blocked (audit 7 D2)
+export function setServerMode(enabled: boolean): boolean {
   try {
     if (enabled) {
       window.localStorage.setItem(AUTH_MODE_STORAGE_KEY, AUTH_MODE_SUPABASE);
     } else {
       window.localStorage.removeItem(AUTH_MODE_STORAGE_KEY);
     }
+    return true;
   } catch (error) {
     console.error("[supabase] failed to write auth mode:", error);
+    return false;
   }
 }
 
