@@ -1,6 +1,6 @@
 # Rive 백로그
 
-최종 갱신: 2026-08-19 (4차 전수조사 — P2·P3 완료 주장 20건 코드 대조 재검증, 문서 모순 정리)
+최종 갱신: 2026-08-19 (6차 전수조사 — Supabase 전환 준비 소스 전수 + 화면 실측 전수, P1-3 체크리스트 확정)
 근거: 코드베이스 전수조사 4회(라우트/컴포넌트/데이터 모델/하이진 스캔/데드코드 스윕) + 제품 스펙 대조.
 모든 항목은 코드에서 확인된 사실 기반이며, 항목마다 스펙 참조(§)와 근거를 병기한다.
 
@@ -9,7 +9,7 @@
 - 구현 완료: 핵심 루프(READ→스톱워치→저장→Today/Calendar), 도서 검색(Kakao+Google 폴백),
   Library/Book Detail(상태·별점·DNF 사유·타임라인), 수동 기록, Insights(기간·속도·시간대·요일),
   AI 취향 분석 온보딩 + Reading Profile + For You 추천/피드백(Gemini 실호출 검증 완료), 테마 3모드,
-  dev 인디케이터 비활성화, 반응형 콘텐츠 폭(512→672→768px), 도서 메타 보강 파이프라인,
+  dev 인디케이터 비활성화, 반응형 콘텐츠 폭(512→672→lg 1024px, 데스크톱 2단), 도서 메타 보강 파이프라인,
   장르 분석 섹션, 시간대 6구간 인사말(일별 로테이션·1분 갱신),
   모드 연동 테마 아이콘(sun/moon/monitor).
 - 내비게이션 v2 (2026-08-18, 사용자 지시로 스펙 §0-3 하단 탭 전제 변경):
@@ -35,14 +35,22 @@
   LIBRARY_CHANGE_EVENT로 열려 있는 Library/Today가 이동 없이 즉시 갱신.
   검증 3라운드 연속 통과(Insights에서 관심 등록, Library 무이동 갱신, 모바일
   캘린더 새 책 기록 저장, 바로 읽기 시작 → Reading Mode).
+- Today 첫 화면 v2 (2026-08-19): 날짜 캡션("8월 19일 수요일") + 인사말 볼드 헤드라인 계층.
+  상태별 3분기 — ① 서재 완전 비어 있음 = 최초 실행 전용 히어로(뷰포트 중앙, 북 글리프 +
+  "오늘의 첫 페이지, 같이 열어볼까요?" + READ) ② 오늘 기록 없음 = 단일 컬럼(데스크톱 중앙)
+  ③ 기록 있음 = 데스크톱 2단(책+READ / TODAY). "오늘은 아직 기록이 없어요" 빈 상태 문구는
+  사용자 지시로 제거. 주요 CTA 2계층 통일 — 히어로급(py-4·18px·tracking-wide·shadow·hover):
+  Today/Book Detail READ, Discover 3종, 핵심 루프 확정 버튼 4종(읽기 시작/저장 2곳/온보딩
+  다음), 시트 확인급(py-3.5·15px)은 기존 유지.
 - 페이지 7개, API 라우트 5개(books/search·books/enrich·ai/profile·ai/recommend·ai/wrapped),
-  컴포넌트 28개. 단위 테스트 60개 통과 (4차 전수조사 실측).
+  컴포넌트 29개(PageSkeleton 포함). 단위 테스트 62개 통과 (6차 전수조사 실측).
 - 코드 하이진: TODO/FIXME/`any`/빈 catch/ts-ignore 0건 (3차 전수조사 재확인.
   유일 예외: theme.ts의 FOUC 방지 인라인 스크립트 문자열 내부 빈 catch — 무해).
 - 설계 부합성 (2026-08-19 3차 조사): 스펙 핵심 원칙 14항목 전부 충족 판정 —
   READ 히어로, Minimal Input(필수 입력=종료 페이지 1개), 자동 이어읽기, 다중 Reading,
   Sheet 우선(중앙 modal 0건), 부정 메시지 0건, AI 책 창작 불가(인덱스 참조), AI 캐싱,
-  통계 무AI, Empty state 행동 안내, 표지 폴백, 상태 전달형 애니메이션, 테마 3모드,
+  통계 무AI, Empty state 행동 안내(단 Today의 "오늘 기록 없음" 문구는 2026-08-19
+  사용자 지시로 의도적 제거 — 예외), 표지 폴백, 상태 전달형 애니메이션, 테마 3모드,
   Stopwatch 히어로(차순위 대비 약 3.5배).
 - 환경: dev/start 포트 7001 (7000은 macOS AirPlay가 점유). `.env.local`에
   KAKAO_REST_API_KEY, GEMINI_API_KEY 설정 완료. AI 모델: gemini-3.6-flash
@@ -107,9 +115,49 @@
 - `genreDistribution()` 순수 함수(+테스트 3개): 독서 시간을 책 카테고리에 배분.
   Insights에 Genres 섹션 추가. 데이터는 1번 활성화 후 채워짐.
 
-### 3. Supabase 전환 + 인증 (§70–77) — 사용자 지시로 보류 중
-- 사실: 저장소 경계는 `src/lib/repository/types.ts` 인터페이스로 준비됨.
-  `UserBook`에 스펙 §73의 `ownership`/`format` 필드 없음 — 전환 설계 시 함께 결정.
+### 3. Supabase 전환 + 인증 (§70–77) — 사용자 지시로 보류 중, **전환 체크리스트는 6차 조사로 확정 (2026-08-19)**
+- 사실: 저장소 경계는 `src/lib/repository/types.ts` 인터페이스로 준비됨 — 6차 전수 검색
+  결과 경계 유출 0건(예외는 dataTransfer.ts, 재작성 대상으로 주석 명시됨). 교체 대상은
+  dexieRepository.ts 1개 + dataTransfer.ts + discover/page.tsx의 추천 ID 생성 1곳.
+- **전환 전 필수(블로커)**:
+  - B1. API 라우트 5개 인증·rate limit·body 크기 제한 부재 — 특히 ai/recommend는 요청
+    1회 = Gemini 2회 + 검색 4~6회 + 약 40초 점유. ai/wrapped는 입력 무검증으로 임의
+    JSON이 프롬프트에 삽입됨. mood/timeAvailable 등 프롬프트 인젝션 표면 존재.
+    Supabase 인증 도입의 첫 수혜 지점 — 인증 게이트+사용자별 rate limit+배열/본문 상한.
+  - B2. 클라이언트 ID 생성 5곳(crypto.randomUUID — repository 4곳 + discover 1곳) —
+    서버는 gen_random_uuid() 기본값 + RLS user_id 강제로 전환.
+  - B3. 고정 키 단일 레코드 5종(activeSession "active", preference "primary",
+    aiProfile "current", goals "current", wrapped "YYYY-MM" 자연키) — 전부
+    (user_id, …) 복합키 재설계. goals는 (user_id, year)로 가면 롤오버 코드 단순화.
+  - B4. upsertBookByIsbn의 isbn 부재 시 전체 스캔+경합 — unique index + on conflict
+    upsert로 대체. **books를 공유 카탈로그로 둘지 사용자별로 둘지가 최대 설계 결정**
+    (updateBookMeta 쓰기 권한과 연동).
+- **전환과 동시 결정**:
+  - 타임스탬프 epoch ms ↔ timestamptz 정책. 시간대 의존 집계(dayRange·histogram 등
+    8곳)는 클라이언트 계산 유지 권장(UTC 이동 시 체감 결과 변형).
+  - activeSession 다기기 충돌 — 현재 무경고 덮어쓰기. 기기당 1세션 vs 사용자당
+    1세션+확인 UI 결정 필요.
+  - LIBRARY_CHANGE_EVENT(같은 탭 한정, 발행 11곳/구독 2곳) → Supabase Realtime 또는
+    BroadcastChannel+포커스 재조회.
+  - Dexie 트랜잭션 2곳(removeBookCompletely 6테이블, replaceActiveRecommendations)은
+    Supabase JS로 원자성 불가 — plpgsql RPC로 구현.
+  - 스키마 갭: ownership/format(§73), subtitle/publishedDate/language/isbn10(§72 —
+    isbn10은 Kakao 응답에 있으나 현재 폐기), extraRatings·BookRef[]·추천 book 스냅샷·
+    AiProfile 중첩 구조의 jsonb vs 정규화.
+  - 이관 도구: exportAllData 페이로드가 단순해 서버 임포트에 재활용 가능 — user_id
+    주입 + ID 재발급 여부 + EXPORT_VERSION↔Dexie 버전 연동 규칙 필요.
+- **전환 전 코드 개선 — 완료 (2026-08-19, 브라우저 회귀 8지점 실측 통과)**:
+  - ~~N+1 조회~~ → 저장소에 `listBooksByIds`(bulkGet 기반 Map 반환) 추가, 8곳 적용
+    (Today 세션/과거의 오늘, behavior 2곳, Insights 리캡/장르, Library, ReadSheet).
+    behavior.ts의 2N 중복도 배치 2회로 해소.
+  - ~~독립 조회 순차 await~~ → Promise.all 병렬화 4곳(Discover, Insights 로드,
+    Insights 리캡, Book Detail).
+  - ~~mutation 가드 부재~~ → Book Detail 7개 핸들러에 busy 가드+finally 해제, 제거
+    확인 버튼 disabled, NotesQuotes handleDelete에 deleting 가드.
+  - 잔여: 낙관적 업데이트 0건(전 화면 await→전체 재조회 패턴)은 전환 시 화면별로 결정.
+    useMonthSessions는 자체 캐시 보유로 배치 전환 제외.
+- **사용자 액션 필요**: 마스터 스펙 §70~77·§72~73 원문을 docs/에 추가(스키마 확정 전제),
+  배포 플랫폼 결정(rate limit 수단이 플랫폼 종속), Supabase 프로젝트 생성.
 
 ### 4. 배포 (§78) — 미착수
 - Vercel/Cloudflare 중 선택, 환경변수(KAKAO/GEMINI) 등록 필요.
@@ -172,8 +220,9 @@
    `page.module.css` + `public/*.svg` 5개 삭제.
 4. **AI 추천 응답 시간** — 추천 파이프라인 실측 약 40초(키워드 생성→검색 4~6회→랭킹).
    로딩 UX 개선 또는 파이프라인 단축 검토 여지.
-5. **추천 캐시의 category 필드 부재** — `AiRecommendation`에 카테고리 개념이 없어
-   §52 확장 시 스키마 변경 필요.
+5. ~~추천 캐시의 category 필드 부재~~ — **사실 아님, 정정 (6차 조사)**:
+   `AiRecommendation.category`는 존재하고 사용 중(types.ts, discover 카테고리 그룹핑).
+   §52 구현 완료 서술과 모순되던 낡은 항목이라 종결.
 6. **Google Books 키리스 쿼터** — 서버 IP 기준 429 제한을 실측. Kakao 키 부재 환경에서만
    영향. 필요 시 Google API 키 추가로 해결.
 7. ~~TabBar 도달 불가 분기 + 낡은 주석~~ — **해결됨 (2026-08-18)**: 내비게이션 v2
@@ -185,10 +234,10 @@
    링크(카카오 우선), `KakaoBookDocument.contents` → description 저장,
    `AiRecommendation.feedbackReason` → behavior 신호, `BookSearchResponse.source` →
    검색 출처 캡션, `RangeSummary.sessionCount` → 기간 타일 "기록 n회".
-   잔여(4차 조사 실측): `PreferenceProfile.updatedAt`(설문 다시 하기와 함께),
-   `UserBook.extraRatings`(아래 4차 발견 참조), `ReadingGoals.year`(아래 4차 발견 참조),
+   잔여(5차 조사 기준): `PreferenceProfile.updatedAt`(설문 다시 하기와 함께),
    `WrappedSummary.generatedAt`, `AiRecommendation.generatedAt`(정렬은 matchPercent만 사용),
    `ReadingSession.createdAt`(프로덕션 읽기 없음).
+   ※ `UserBook.extraRatings`·`ReadingGoals.year`는 2026-08-19 해소(아래 4차 발견 A·B).
 10. **Book Detail 백필 논블로킹화 완료 (2026-08-19)** — 메타 백필이 첫 페인트를 막던
    문제 수정(실측 129ms), 보강 성공 시에만 재렌더.
 
@@ -199,24 +248,23 @@
 코드 실측 결과: 테스트 60개·tsc·lint·빌드 전부 통과, 하이진 위반 0건,
 P0 5건 및 P2·P3 완료 주장 20건 중 19건 코드와 정확히 일치. 아래는 신규 발견분.
 
-### A. `ReadingGoals.year` 연도 롤오버 결함 — 유일한 기능적 결함
-- 사실: `insights/page.tsx`가 저장 시 `year`를 기록하지만 어디서도 읽지 않음.
-  헤더는 현재 연도, 목표치는 저장 당시 연도 값(고정 키 `"current"`), 진행률은 올해 누적.
-- 결과: 해가 바뀌면 "Goals 2027" 아래 2026년 목표치와 2027년(거의 0) 진행률이 병기되고,
-  GoalsForm도 작년 숫자를 프리필. 연도 비교/자동 리셋 로직 없음.
-- 제안: 로드 시 `goals.year !== 현재 연도`면 목표 재설정 유도(또는 연도별 키로 저장).
+### ~~A. `ReadingGoals.year` 연도 롤오버 결함~~ — **해결됨 (2026-08-19)**
+- 원문: 저장 시 `year`를 기록하지만 읽지 않아, 해가 바뀌면 낡은 목표치와 새해 진행률이 병기.
+- 수정: `insights/page.tsx` 로드 시 `goals.year !== 현재 연도`면 만료로 취급(null) —
+  "올해 목표 세우기"로 재설정 유도, GoalsForm 프리필도 초기화.
+- 검증: 브라우저 실측 — year=2025로 바꾸면 진행바·"목표 수정" 사라지고 "올해 목표 세우기"
+  노출, 2026 복원 시 진행바 복귀.
 
-### B. `UserBook.extraRatings` 쓰기 전용 — 소비처 부재
-- 사실: 완독 2단계 평가(read/page.tsx)에서 저장하지만 읽는 코드가 전무.
-  Book Detail은 rating·dnfReason만 렌더, AI 입력(BehaviorBookEntry)에도 미포함.
-- 제안: Book Detail 표시 또는 BehaviorBookEntry 확장(§25는 취향 분석 입력으로 규정) 중 택일.
+### ~~B. `UserBook.extraRatings` 쓰기 전용~~ — **해결됨 (2026-08-19, 양쪽 모두 배선)**
+- 수정 1: `BehaviorBookEntry.extraRatings` 추가(contracts.ts) + `collectBehaviorSnapshot`이
+  값 있을 때 포함(behavior.ts) — §25 취향 분석 입력.
+- 수정 2: Book Detail 완독 행에 "재미 4 · 몰입도 5" 형태 표기(별점 옆).
+- 검증: 브라우저 실측 — extraRatings 저장 책 상세에서 라벨 노출 확인.
 
-### C. 저위험 정합성 2건
-- `dataTransfer.ts` 주석은 "전 테이블"이라 하나 실제로는 `activeSession` 제외 10개 테이블만
-  백업(일회성 상태라 의도로 보이나 주석과 불일치 — 주석 수정 필요).
-- `removeBookCompletely`가 `activeSession`을 정리하지 않음 — 진행 중 세션의 책을 제거하면
-  고아 레코드 가능. 단 활성 세션 중 Book Detail 도달이 사실상 불가하고 read 페이지가
-  `setBook(null)`로 방어해 하드 락 없음. 트랜잭션에 activeSession 정리 1줄 추가 여지.
+### ~~C. 저위험 정합성 2건~~ — **해결됨 (2026-08-19)**
+- `dataTransfer.ts` 주석을 "activeSession 제외 전 테이블"로 사실에 맞게 수정.
+- `removeBookCompletely` 트랜잭션에 activeSession 정리 추가 — 제거 대상 책의 진행 중
+  세션이면 함께 삭제(고아 레코드 차단).
 
 ### D. 플랜/스펙 문서 낡음 (기록용)
 - `docs/superpowers/plans/2026-08-18-reading-calendar-core-loop.md`: 삭제된
@@ -224,3 +272,68 @@ P0 5건 및 P2·P3 완료 주장 20건 중 19건 코드와 정확히 일치. 아
   역사적 스냅샷 문서로 간주(문서 상단에 주의 문구 추가함). 최신 상태는 본 BACKLOG가 기준.
 - 스펙 변경 이력의 콘텐츠 폭 서술(768px)은 lg 1024px 확대 이전 세대 — 스펙 12행의
   "BACKLOG가 단일 기준" 위임에 따라 본 문서를 우선한다.
+
+---
+
+## 5차 전수조사 (2026-08-19) — 발견 및 처리
+
+실측: 테스트 62개·tsc·lint·빌드 전부 통과. 미커밋 변경 5건(첫 화면 재설계, Goals 롤오버,
+extraRatings, activeSession 정리, 버튼 통일)의 코드 정합성 검증 완료.
+
+### 즉시 수정됨 (조사 직후 반영)
+- **H1 최초 실행 판정 버그**: isFresh가 reading 책 유무만 봐서 want/paused/read만 있는
+  사용자에게도 "책 검색부터" 히어로가 노출되던 문제 → 서재 총 권수 0 조건 추가
+  (`page.tsx` hasAnyBook).
+- **M1 버튼 통일 잔여 4건**: 핵심 루프 확정 버튼(StartPageConfirm 읽기 시작, EndPageSheet
+  저장, ManualSessionSheet 저장, OnboardingWizard 다음/완료)에 히어로 마감 적용.
+- 주석 요일 오류(format.ts 예시 화요일→수요일) 수정.
+
+### 결함 아님 (기록)
+- H2 "오늘은 아직 기록이 없어요" 소실 — 사용자 명시 지시로 제거된 것. Empty state 원칙의
+  의도된 예외로 상태 요약에 기재.
+
+### 단기·중기 일괄 처리 (2026-08-19, 사용자 지시 "전부 진행" — E2E 검증 포함)
+- **M3 시트 접근성 해소**: BottomSheet에 Escape 닫기 + 열릴 때 패널 포커스(autoFocus 입력
+  우선) + 닫힐 때 포커스 복귀 + `label` prop(aria-label) — 호출부 17곳 전부 라벨 부여.
+  전역 `:focus-visible` 링(globals.css) 추가. Escape 닫기·라벨 브라우저 실측 확인.
+  ※ 완전한 포커스 트랩(Tab 순환 가둠)은 미구현 — 잔여.
+- **M7 해소**: pageCount=0 책도 완독 체크박스 노출(기본 해제, 도달 시 자동 체크는 유지).
+- **M6 해소**: 세션 0개여도 완독 처리된 책이면 완독 행(완독일·별점·추가 평가) 렌더.
+- **M4/M5 해소**: StatusSheet DNF 단계 "뒤로", ReadSheet 검색 뷰 "뒤로"·확인 뷰
+  "다른 책 선택/다른 책 찾기" 추가. 브라우저 실측 확인.
+- **M2 해소**: cursor-pointer 약 25곳 일괄 보정 (ReadSheet 내부 불일치 포함).
+- **L급 처리**: L1(프롬프트에 extraRatings 척도 설명), L2(Today 날짜/인사말
+  suppressHydrationWarning), L3(주석 요일), L5(위저드 이중 min-h-dvh → flex-1),
+  L6(차트 all-zero 빈 문구), L7(WrappedSheet — !ctx/!blob 사용자 표시 에러),
+  L10(aria-pressed — 라이브러리 칩·달력 날짜·무드/시간 칩·노트 탭·온보딩 옵션·상태 옵션),
+  L11(검색·노트 입력 aria-label), L12(공용 PageSkeleton — read/discover/library/상세 4화면),
+  L13(진행바 role="progressbar" — CurrentlyReading·장르바·GoalBar).
+
+### 잔여 일괄 처리 2차 (2026-08-19 — "잔여 과제 진행" 지시)
+- **포커스 트랩 완전판**: BottomSheet Tab/Shift+Tab 순환을 시트 안에 가둠 —
+  Tab 10회·Shift+Tab 5회 모두 다이얼로그 내부 유지 실측.
+- **L8**: HourBars/WeekdayBars에 role="img"+분포 요약 aria-label, YearHeatmap 스크롤
+  컨테이너 tabIndex=0+region 라벨(키보드 스크롤 가능).
+- **L9**: 추천 카드 3버튼 flex-wrap+min-w-[30%] — 좁으면 마지막 버튼이 줄바꿈.
+- **L14**: BookCover fluid에 뷰포트 기반 sizes("(min-width:1024px) 160px, 33vw").
+- **L15**: 백업 가져오기에서 앱보다 새 버전(version > EXPORT_VERSION) 거부.
+- **신규**: getDb 최초 호출 시 `navigator.storage.persist()` 요청 — 브라우저 저장 공간
+  정리로 IndexedDB가 지워질 위험 완화(최선 노력, 거부돼도 무해).
+
+### 잔여 (최종 — 전부 미세/보류)
+- L4(formatExtraRatingsLabel 렌더당 2회 호출 — 미세 성능), Wrapped 캐시 읽기 실패는
+  console.error만(무해, 버튼 폴백 존재).
+- 참고: 마스터 제품 스펙(§0~§86) 원문이 리포지토리에 없음 — 원문 대조가 필요하면 스펙
+  문서를 docs/에 추가할 것.
+
+---
+
+## 6차 전수조사 (2026-08-19) — Supabase 전환 준비
+
+- 소스 전수: Repository 경계 유출 0건, 하이진 위반 0건, 테스트 62·tsc·lint·빌드 통과.
+  전환 체크리스트(B1~B4 블로커, 동시 결정 6건, 개선 권장 4건)는 P1-3 항목에 반영.
+- 화면 실측 전수: 6개 라우트 × 3뷰포트(390/768/1280) 18지점 — 가로 오버플로 0,
+  페이지 에러 0, 콘솔 에러 0. 핵심 루프 E2E(READ→선택→시작→스톱워치→STOP→종료 시트→
+  완독 체크박스 조건→2탭 폐기→Today 복귀, DB 무변화) 통과. pageCount=0 책의 완독
+  체크박스 상시 노출(M7 신규 동작)도 실기로 확인.
+- 문서 정정: 부채 #5(category 부재 주장)는 사실 아님 — 종결. 컴포넌트 수 29개로 갱신.
