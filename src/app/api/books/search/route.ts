@@ -4,6 +4,9 @@ import type { BookSearchResponse } from "@/lib/types";
 
 const STATUS_BAD_REQUEST = 400;
 const STATUS_BAD_GATEWAY = 502;
+// 외부 API 프록시 남용 방지용 검색어 길이 상한 (7차 조사 권장)
+// Query-length cap against proxy abuse (audit 7 recommendation)
+const MAX_QUERY_CHARS = 200;
 
 // 도서 검색 — Kakao 우선, 실패 또는 키 부재 시 Google Books 폴백 (스펙 §59–60)
 // Book search — Kakao first, falling back to Google Books when the key is absent or the call fails (spec §59–60)
@@ -11,7 +14,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("q")?.trim() ?? "";
 
-  if (query === "") {
+  if (query === "" || query.length > MAX_QUERY_CHARS) {
     return Response.json(
       { error: "검색어(q)가 필요합니다." },
       { status: STATUS_BAD_REQUEST },

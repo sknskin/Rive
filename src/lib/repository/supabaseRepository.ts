@@ -279,11 +279,21 @@ export class SupabaseRepository implements ReadingRepository {
     bookId: string,
     patch: Partial<Pick<Book, "pageCount" | "description" | "categories" | "enrichedAt">>,
   ): Promise<void> {
+    // undefined는 "값 지우기" — 다른 patch 매퍼와 동일한 규칙 (7차 조사 규칙 통일)
+    // Explicit undefined clears the column, matching the other patch mappers (audit 7)
+    const META_COLUMNS: Record<string, string> = {
+      pageCount: "page_count",
+      description: "description",
+      categories: "categories",
+      enrichedAt: "enriched_at",
+    };
     const row: Record<string, unknown> = {};
-    if (patch.pageCount !== undefined) row.page_count = patch.pageCount;
-    if (patch.description !== undefined) row.description = patch.description;
-    if (patch.categories !== undefined) row.categories = patch.categories;
-    if (patch.enrichedAt !== undefined) row.enriched_at = patch.enrichedAt;
+    for (const [key, value] of Object.entries(patch)) {
+      const column = META_COLUMNS[key];
+      if (column) {
+        row[column] = value === undefined ? null : value;
+      }
+    }
     const result = await this.client.from("books").update(row).eq("id", bookId).select("id");
     const updated = unwrap(result, "books update meta") as { id: string }[];
     if (updated.length === 0) {

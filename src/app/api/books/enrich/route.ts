@@ -3,6 +3,9 @@ import { fetchOpenLibraryMeta } from "@/lib/bookSearch/enrichOpenLibrary";
 
 const STATUS_BAD_REQUEST = 400;
 const STATUS_BAD_GATEWAY = 502;
+// 외부 API 프록시 남용 방지용 입력 길이 상한 (7차 조사 권장)
+// Input-length cap against proxy abuse (audit 7 recommendation)
+const MAX_PARAM_CHARS = 200;
 
 // 도서 메타 보강 — Google Books 우선, 실패/결과 없음이면 Open Library 폴백 (스펙 §60–61)
 // Book metadata enrichment — Google Books first, Open Library fallback (spec §60–61)
@@ -12,7 +15,12 @@ export async function GET(request: Request) {
   const title = searchParams.get("title")?.trim() ?? "";
   const author = searchParams.get("author")?.trim() ?? "";
 
-  if (isbn === "" && title === "") {
+  if (
+    (isbn === "" && title === "") ||
+    isbn.length > MAX_PARAM_CHARS ||
+    title.length > MAX_PARAM_CHARS ||
+    author.length > MAX_PARAM_CHARS
+  ) {
     return Response.json(
       { error: "isbn 또는 title이 필요합니다." },
       { status: STATUS_BAD_REQUEST },
