@@ -18,20 +18,22 @@ import type {
 // 로컬 데이터는 지우지 않고 이관 완료 플래그만 남긴다 (설계 §4 — 안전 우선)
 // Local data is kept intact; only a migrated flag is recorded (design §4)
 
-const MIGRATED_FLAG_KEY = "rive-local-migrated";
+// 이관 플래그는 계정별로 저장한다 — 한 기기에서 다른 계정으로 로그인해도 안내가 뜨도록
+// The migrated flag is per account, so a second account on this device still gets the prompt
+const MIGRATED_FLAG_PREFIX = "rive-local-migrated:";
 
-export function isLocalMigrated(): boolean {
+export function isLocalMigrated(userId: string): boolean {
   try {
-    return window.localStorage.getItem(MIGRATED_FLAG_KEY) === "1";
+    return window.localStorage.getItem(MIGRATED_FLAG_PREFIX + userId) === "1";
   } catch (error) {
     console.error("[migrate] failed to read migrated flag:", error);
     return false;
   }
 }
 
-function markLocalMigrated(): void {
+function markLocalMigrated(userId: string): void {
   try {
-    window.localStorage.setItem(MIGRATED_FLAG_KEY, "1");
+    window.localStorage.setItem(MIGRATED_FLAG_PREFIX + userId, "1");
   } catch (error) {
     console.error("[migrate] failed to write migrated flag:", error);
   }
@@ -48,8 +50,24 @@ export async function hasLocalData(): Promise<boolean> {
   return bookCount > 0 || sessionCount > 0;
 }
 
-export async function migrateLocalToSupabase(): Promise<{ imported: number }> {
-  const db = getDb();
+// 내보내기 페이로드와 같은 모양의 도메인 테이블 묶음 — 이관과 서버 가져오기가 공유한다
+// Domain-table bundle matching the export payload; shared by migration and server import
+export interface DomainTables {
+  books?: Book[];
+  userBooks?: UserBook[];
+  readingSessions?: ReadingSession[];
+  notes?: BookNote[];
+  quotes?: BookQuote[];
+  preferences?: PreferenceProfile[];
+  aiProfiles?: AiProfile[];
+  recommendations?: AiRecommendation[];
+  goals?: ReadingGoals[];
+  wrapped?: WrappedSummary[];
+}
+
+// 도메인 테이블을 Supabase에 참조 순서대로 upsert한다 (RLS가 본인 행만 허용)
+// Upserts domain tables to Supabase in reference order (RLS scopes to the owner)
+export async function uploadDomainTables(tables: DomainTables): Promise<{ imported: number }> {
   const supabase = getSupabase();
   let imported = 0;
 
@@ -57,9 +75,7 @@ export async function migrateLocalToSupabase(): Promise<{ imported: number }> {
     throw new Error(`[migrate] ${context}: ${message}`);
   };
 
-  // 참조 순서대로 이관한다 — books가 전 테이블의 FK 대상
-  // Migrate in reference order — books is every table's FK target
-  const books = (await db.books.toArray()) as Book[];
+  const books = tables.books ?? [];
   if (books.length > 0) {
     const { error } = await supabase.from("books").upsert(
       books.map((book) => ({
@@ -83,7 +99,7 @@ export async function migrateLocalToSupabase(): Promise<{ imported: number }> {
     imported += books.length;
   }
 
-  const userBooks = (await db.userBooks.toArray()) as UserBook[];
+  const userBooks = tables.userBooks ?? [];
   if (userBooks.length > 0) {
     const { error } = await supabase.from("user_books").upsert(
       userBooks.map((userBook) => ({
@@ -106,7 +122,7 @@ export async function migrateLocalToSupabase(): Promise<{ imported: number }> {
     imported += userBooks.length;
   }
 
-  const sessions = (await db.readingSessions.toArray()) as ReadingSession[];
+  const sessions = tables.readingSessions ?? [];
   if (sessions.length > 0) {
     const { error } = await supabase.from("reading_sessions").upsert(
       sessions.map((session) => ({
@@ -127,7 +143,7 @@ export async function migrateLocalToSupabase(): Promise<{ imported: number }> {
     imported += sessions.length;
   }
 
-  const notes = (await db.notes.toArray()) as BookNote[];
+  const notes = tables.notes ?? [];
   if (notes.length > 0) {
     const { error } = await supabase.from("notes").upsert(
       notes.map((note) => ({
@@ -142,7 +158,7 @@ export async function migrateLocalToSupabase(): Promise<{ imported: number }> {
     imported += notes.length;
   }
 
-  const quotes = (await db.quotes.toArray()) as BookQuote[];
+  const quotes = tables.quotes ?? [];
   if (quotes.length > 0) {
     const { error } = await supabase.from("quotes").upsert(
       quotes.map((quote) => ({
@@ -159,7 +175,7 @@ export async function migrateLocalToSupabase(): Promise<{ imported: number }> {
     imported += quotes.length;
   }
 
-  const preferences = (await db.preferences.toArray()) as PreferenceProfile[];
+  const preferences = tables.preferences ?? [];
   if (preferences.length > 0) {
     const profile = preferences[0];
     const { error } = await supabase.from("preferences").upsert(
@@ -180,7 +196,7 @@ export async function migrateLocalToSupabase(): Promise<{ imported: number }> {
     imported += 1;
   }
 
-  const aiProfiles = (await db.aiProfiles.toArray()) as AiProfile[];
+  const aiProfiles = tables.aiProfiles ?? [];
   if (aiProfiles.length > 0) {
     const profile = aiProfiles[0];
     const { error } = await supabase.from("ai_profiles").upsert(
@@ -202,7 +218,7 @@ export async function migrateLocalToSupabase(): Promise<{ imported: number }> {
     imported += 1;
   }
 
-  const recommendations = (await db.recommendations.toArray()) as AiRecommendation[];
+  const recommendations = tables.recommendations ?? [];
   if (recommendations.length > 0) {
     const { error } = await supabase.from("recommendations").upsert(
       recommendations.map((item) => ({
@@ -221,7 +237,7 @@ export async function migrateLocalToSupabase(): Promise<{ imported: number }> {
     imported += recommendations.length;
   }
 
-  const goals = (await db.goals.toArray()) as ReadingGoals[];
+  const goals = tables.goals ?? [];
   if (goals.length > 0) {
     const { error } = await supabase.from("goals").upsert(
       goals.map((goal) => ({
@@ -237,7 +253,7 @@ export async function migrateLocalToSupabase(): Promise<{ imported: number }> {
     imported += goals.length;
   }
 
-  const wrapped = (await db.wrapped.toArray()) as WrappedSummary[];
+  const wrapped = tables.wrapped ?? [];
   if (wrapped.length > 0) {
     const { error } = await supabase.from("wrapped").upsert(
       wrapped.map((entry) => ({
@@ -251,6 +267,32 @@ export async function migrateLocalToSupabase(): Promise<{ imported: number }> {
     imported += wrapped.length;
   }
 
-  markLocalMigrated();
   return { imported };
+}
+
+export async function migrateLocalToSupabase(): Promise<{ imported: number }> {
+  const db = getDb();
+
+  const tables: DomainTables = {
+    books: (await db.books.toArray()) as Book[],
+    userBooks: (await db.userBooks.toArray()) as UserBook[],
+    readingSessions: (await db.readingSessions.toArray()) as ReadingSession[],
+    notes: (await db.notes.toArray()) as BookNote[],
+    quotes: (await db.quotes.toArray()) as BookQuote[],
+    preferences: (await db.preferences.toArray()) as PreferenceProfile[],
+    aiProfiles: (await db.aiProfiles.toArray()) as AiProfile[],
+    recommendations: (await db.recommendations.toArray()) as AiRecommendation[],
+    goals: (await db.goals.toArray()) as ReadingGoals[],
+    wrapped: (await db.wrapped.toArray()) as WrappedSummary[],
+  };
+
+  const result = await uploadDomainTables(tables);
+
+  // 이관 완료를 현재 계정에 기록한다
+  // Record completion for the current account
+  const { data } = await getSupabase().auth.getUser();
+  if (data.user) {
+    markLocalMigrated(data.user.id);
+  }
+  return result;
 }

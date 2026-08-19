@@ -42,7 +42,7 @@ export default function AccountSection() {
           if (!isServerMode()) {
             setServerMode(true);
           }
-          const migratable = !isLocalMigrated() && (await hasLocalData());
+          const migratable = !isLocalMigrated(session.user.id) && (await hasLocalData());
           if (cancelled) {
             return;
           }
@@ -68,9 +68,9 @@ export default function AccountSection() {
 
   // 로그인 성공 공통 처리 — 로컬 기록이 있으면 이관을 먼저 묻는다 (설계 §4)
   // Shared sign-in success path — offers migration first when local data exists
-  async function enterServerMode(signedInEmail: string) {
+  async function enterServerMode(signedInEmail: string, userId: string) {
     setServerMode(true);
-    const migratable = !isLocalMigrated() && (await hasLocalData());
+    const migratable = !isLocalMigrated(userId) && (await hasLocalData());
     if (migratable) {
       setUserEmail(signedInEmail);
       setView("migratePrompt");
@@ -104,14 +104,14 @@ export default function AccountSection() {
           setBusy(false);
           return;
         }
-        await enterServerMode(data.session.user.email ?? "");
+        await enterServerMode(data.session.user.email ?? "", data.session.user.id);
         return;
       }
       const { data, error } = await auth.signInWithPassword({ email: email.trim(), password });
       if (error) {
         throw error;
       }
-      await enterServerMode(data.session.user.email ?? "");
+      await enterServerMode(data.session.user.email ?? "", data.session.user.id);
     } catch (error) {
       console.error("[Account] auth failed:", error);
       setErrorText(
