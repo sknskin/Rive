@@ -1,11 +1,34 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import BottomSheet from "@/components/BottomSheet";
 import { formatShortDate } from "@/lib/format";
 import { getRepository } from "@/lib/repository";
+import { getAuthHeader, isServerMode } from "@/lib/supabase/client";
 import type { BookNote, BookQuote } from "@/lib/types";
+
+// 인용구 사진 OCR — 업로드 전 리사이즈로 전송량과 서버 상한을 함께 지킨다 (리서치 2차)
+// Quote-photo OCR — client-side resize keeps payloads within the server cap
+const OCR_MAX_DIMENSION = 1024;
+const OCR_JPEG_QUALITY = 0.8;
+
+// 파일 → 압축 JPEG base64 (data: 접두어 제외)
+// File → compressed JPEG base64 without the data: prefix
+async function compressImageToBase64(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, OCR_MAX_DIMENSION / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    throw new Error("canvas context unavailable");
+  }
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  return canvas.toDataURL("image/jpeg", OCR_JPEG_QUALITY).split(",")[1];
+}
 
 // 노트/인용구 관리 — Book Detail 안에서만 다룬다 (스펙 §27)
 // Notes/quotes management — lives inside Book Detail (spec §27)
@@ -191,6 +214,38 @@ function AddEntryForm({ bookId, onSaved }: { bookId: string; onSaved: () => void
   const [comment, setComment] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [ocrBusy, setOcrBusy] = useState(false);
+  const ocrInputRef = useRef<HTMLInputElement>(null);
+
+  // 사진에서 문장 추출 — 로그인(서버 모드) 사용자만, Gemini 비전 사용 (리서치 2차)
+  // Extract text from a photo — signed-in users only, powered by Gemini vision
+  async function handleOcrFile(file: File) {
+    setOcrBusy(true);
+    setSaveError("");
+    try {
+      const imageBase64 = await compressImageToBase64(file);
+      const response = await fetch("/api/ai/quote-ocr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await getAuthHeader()) },
+        body: JSON.stringify({ imageBase64, mimeType: "image/jpeg" }),
+      });
+      const body = (await response.json()) as { text?: string; error?: string };
+      if (!response.ok) {
+        setSaveError(body.error ?? "사진에서 글자를 읽지 못했어요.");
+        return;
+      }
+      if (!body.text) {
+        setSaveError("사진에서 글자를 찾지 못했어요. 더 선명한 사진으로 시도해 주세요.");
+        return;
+      }
+      setText(body.text);
+    } catch (error) {
+      console.error("[NotesQuotes] ocr failed:", error);
+      setSaveError("사진을 처리하지 못했어요. 다시 시도해 주세요.");
+    } finally {
+      setOcrBusy(false);
+    }
+  }
 
   const page = Number.parseInt(pageText, 10);
   const valid =
@@ -247,6 +302,35 @@ function AddEntryForm({ bookId, onSaved }: { bookId: string; onSaved: () => void
           </button>
         ))}
       </div>
+
+      {/* 사진 OCR — 인용구 모드 + 로그인 상태에서만 (AI 라우트가 인증 필수) */}
+      {/* Photo OCR — quote mode and signed-in only (the AI route requires auth) */}
+      {kind === "quote" && isServerMode() && (
+        <>
+          <button
+            type="button"
+            disabled={ocrBusy || saving}
+            onClick={() => ocrInputRef.current?.click()}
+            className="mt-3 w-full cursor-pointer rounded-xl bg-fill py-2.5 text-[13px] font-medium text-tint active:opacity-70 disabled:opacity-40"
+          >
+            {ocrBusy ? "사진에서 읽는 중…" : "책 사진에서 문장 가져오기"}
+          </button>
+          <input
+            ref={ocrInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) {
+                void handleOcrFile(file);
+              }
+              event.target.value = "";
+            }}
+          />
+        </>
+      )}
 
       <div className="mt-4 flex flex-col gap-3">
         <textarea
