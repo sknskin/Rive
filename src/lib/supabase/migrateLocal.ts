@@ -109,7 +109,6 @@ const VALID_STATUSES = new Set(["reading", "want", "read", "paused", "dnf"]);
 // Remaps ids onto existing server books and filters broken rows (audit 7 D1, D4, D7)
 export async function uploadDomainTables(tables: DomainTables): Promise<{ imported: number }> {
   const supabase = getSupabase();
-  let imported = 0;
 
   const fail = (context: string, message: string): never => {
     throw new Error(`[migrate] ${context}: ${message}`);
@@ -131,29 +130,8 @@ export async function uploadDomainTables(tables: DomainTables): Promise<{ import
     ...serverIds,
   ]);
 
-  if (books.length > 0) {
-    const { error } = await supabase.from("books").upsert(
-      books.map((book) => ({
-        id: book.id,
-        title: book.title,
-        authors: book.authors,
-        publisher: book.publisher,
-        isbn13: book.isbn13,
-        cover_url: book.coverUrl,
-        page_count: book.pageCount,
-        kakao_url: book.kakaoUrl,
-        google_books_id: book.googleBooksId,
-        created_at: book.createdAt,
-        description: book.description ?? null,
-        categories: book.categories ?? null,
-        enriched_at: book.enrichedAt ?? null,
-      })),
-      { onConflict: "id" },
-    );
-    if (error) fail("books", error.message);
-    imported += books.length;
-  }
-
+  // 자식 테이블은 book_id를 재매핑하고, 참조가 깨졌거나 값이 손상된 행을 걸러낸다
+  // Children get remapped book ids; rows with broken refs or bad values are dropped
   const userBooks = (tables.userBooks ?? [])
     .filter(
       (userBook) =>
@@ -162,27 +140,6 @@ export async function uploadDomainTables(tables: DomainTables): Promise<{ import
         knownBookIds.has(mapBookId(userBook.bookId)),
     )
     .map((userBook) => ({ ...userBook, bookId: mapBookId(userBook.bookId) }));
-  if (userBooks.length > 0) {
-    const { error } = await supabase.from("user_books").upsert(
-      userBooks.map((userBook) => ({
-        book_id: userBook.bookId,
-        status: userBook.status,
-        current_page: userBook.currentPage,
-        started_at: userBook.startedAt,
-        finished_at: userBook.finishedAt,
-        created_at: userBook.createdAt,
-        last_read_at: userBook.lastReadAt,
-        rating: userBook.rating ?? null,
-        dnf_reason: userBook.dnfReason ?? null,
-        extra_ratings: userBook.extraRatings ?? null,
-        up_next_at: userBook.upNextAt ?? null,
-        target_date: userBook.targetDate ?? null,
-      })),
-      { onConflict: "user_id,book_id" },
-    );
-    if (error) fail("user_books", error.message);
-    imported += userBooks.length;
-  }
 
   const sessions = (tables.readingSessions ?? [])
     .filter(
@@ -190,157 +147,44 @@ export async function uploadDomainTables(tables: DomainTables): Promise<{ import
         typeof session?.id === "string" && knownBookIds.has(mapBookId(session.bookId)),
     )
     .map((session) => ({ ...session, bookId: mapBookId(session.bookId) }));
-  if (sessions.length > 0) {
-    const { error } = await supabase.from("reading_sessions").upsert(
-      sessions.map((session) => ({
-        id: session.id,
-        book_id: session.bookId,
-        started_at: session.startedAt,
-        ended_at: session.endedAt,
-        duration_seconds: session.durationSeconds,
-        start_page: session.startPage,
-        end_page: session.endPage,
-        pages_read: session.pagesRead,
-        memo: session.memo,
-        created_at: session.createdAt,
-      })),
-      { onConflict: "id" },
-    );
-    if (error) fail("reading_sessions", error.message);
-    imported += sessions.length;
-  }
 
   const notes = (tables.notes ?? [])
     .filter((note) => typeof note?.id === "string" && knownBookIds.has(mapBookId(note.bookId)))
     .map((note) => ({ ...note, bookId: mapBookId(note.bookId) }));
-  if (notes.length > 0) {
-    const { error } = await supabase.from("notes").upsert(
-      notes.map((note) => ({
-        id: note.id,
-        book_id: note.bookId,
-        content: note.content,
-        created_at: note.createdAt,
-      })),
-      { onConflict: "id" },
-    );
-    if (error) fail("notes", error.message);
-    imported += notes.length;
-  }
 
   const quotes = (tables.quotes ?? [])
     .filter(
       (quote) => typeof quote?.id === "string" && knownBookIds.has(mapBookId(quote.bookId)),
     )
     .map((quote) => ({ ...quote, bookId: mapBookId(quote.bookId) }));
-  if (quotes.length > 0) {
-    const { error } = await supabase.from("quotes").upsert(
-      quotes.map((quote) => ({
-        id: quote.id,
-        book_id: quote.bookId,
-        page: quote.page,
-        quote: quote.quote,
-        comment: quote.comment,
-        created_at: quote.createdAt,
-      })),
-      { onConflict: "id" },
-    );
-    if (error) fail("quotes", error.message);
-    imported += quotes.length;
-  }
 
-  const preferences = tables.preferences ?? [];
-  if (preferences.length > 0) {
-    const profile = preferences[0];
-    const { error } = await supabase.from("preferences").upsert(
-      {
-        favorite_genres: profile.favoriteGenres,
-        disliked_genres: profile.dislikedGenres,
-        loved_books: profile.lovedBooks,
-        disliked_books: profile.dislikedBooks,
-        fiction_preference: profile.fictionPreference,
-        reading_purposes: profile.readingPurposes,
-        age_range: profile.ageRange ?? null,
-        gender: profile.gender ?? null,
-        updated_at: profile.updatedAt,
-      },
-      { onConflict: "user_id" },
-    );
-    if (error) fail("preferences", error.message);
-    imported += 1;
-  }
+  // 나머지 테이블은 형태만 가볍게 거른다 — 상세 검증과 원자성은 RPC 트랜잭션이 맡는다
+  // Light shape filtering for the rest; the RPC transaction owns atomicity
+  const isObject = (row: unknown): boolean => typeof row === "object" && row !== null;
+  const payload = {
+    books,
+    userBooks,
+    readingSessions: sessions,
+    notes,
+    quotes,
+    preferences: (tables.preferences ?? []).filter(isObject),
+    aiProfiles: (tables.aiProfiles ?? []).filter(isObject),
+    recommendations: (tables.recommendations ?? []).filter(
+      (item) => isObject(item) && typeof item?.id === "string",
+    ),
+    goals: (tables.goals ?? []).filter((goal) => isObject(goal) && Number.isFinite(goal?.year)),
+    wrapped: (tables.wrapped ?? []).filter(
+      (entry) => isObject(entry) && typeof entry?.id === "string",
+    ),
+  };
 
-  const aiProfiles = tables.aiProfiles ?? [];
-  if (aiProfiles.length > 0) {
-    const profile = aiProfiles[0];
-    const { error } = await supabase.from("ai_profiles").upsert(
-      {
-        profile_type: profile.profileType,
-        summary: profile.summary,
-        genres: profile.genres,
-        traits: profile.traits,
-        recommendation_factors: profile.recommendationFactors,
-        evidence: profile.evidence,
-        taste_changes: profile.tasteChanges ?? null,
-        dna: profile.dna ?? null,
-        book_twin: profile.bookTwin ?? null,
-        analyzed_at: profile.analyzedAt,
-      },
-      { onConflict: "user_id" },
-    );
-    if (error) fail("ai_profiles", error.message);
-    imported += 1;
+  // 전 테이블을 단일 plpgsql 트랜잭션으로 upsert — 부분 반영 상태가 남지 않는다 (7차 D4)
+  // Upsert everything in one plpgsql transaction — no partial state left behind (audit 7 D4)
+  const { data, error } = await supabase.rpc("import_user_data", { p: payload });
+  if (error) {
+    fail("import_user_data", error.message);
   }
-
-  const recommendations = tables.recommendations ?? [];
-  if (recommendations.length > 0) {
-    const { error } = await supabase.from("recommendations").upsert(
-      recommendations.map((item) => ({
-        id: item.id,
-        book: item.book,
-        match_percent: item.matchPercent,
-        reason: item.reason,
-        category: item.category ?? null,
-        generated_at: item.generatedAt,
-        status: item.status,
-        feedback_reason: item.feedbackReason ?? null,
-      })),
-      { onConflict: "id" },
-    );
-    if (error) fail("recommendations", error.message);
-    imported += recommendations.length;
-  }
-
-  const goals = tables.goals ?? [];
-  if (goals.length > 0) {
-    const { error } = await supabase.from("goals").upsert(
-      goals.map((goal) => ({
-        year: goal.year,
-        target_books: goal.targetBooks,
-        target_pages: goal.targetPages,
-        target_hours: goal.targetHours,
-        updated_at: goal.updatedAt,
-      })),
-      { onConflict: "user_id,year" },
-    );
-    if (error) fail("goals", error.message);
-    imported += goals.length;
-  }
-
-  const wrapped = tables.wrapped ?? [];
-  if (wrapped.length > 0) {
-    const { error } = await supabase.from("wrapped").upsert(
-      wrapped.map((entry) => ({
-        period: entry.id,
-        summary: entry.summary,
-        generated_at: entry.generatedAt,
-      })),
-      { onConflict: "user_id,period" },
-    );
-    if (error) fail("wrapped", error.message);
-    imported += wrapped.length;
-  }
-
-  return { imported };
+  return { imported: typeof data === "number" ? data : 0 };
 }
 
 export async function migrateLocalToSupabase(): Promise<{ imported: number }> {
