@@ -105,3 +105,10 @@ body {
 .pb-safe-10 {
   padding-bottom: calc(env(safe-area-inset-bottom) + 2.5rem);
 }
+
+/* 키보드 포커스 표시 — 마우스/터치에는 나타나지 않는 focus-visible 링 */
+/* Keyboard focus indicator — a focus-visible ring that stays hidden for mouse/touch */
+:where(button, a, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid var(--tint);
+  outline-offset: 2px;
+}
