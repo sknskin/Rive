@@ -115,7 +115,51 @@
 - `genreDistribution()` 순수 함수(+테스트 3개): 독서 시간을 책 카테고리에 배분.
   Insights에 Genres 섹션 추가. 데이터는 1번 활성화 후 채워짐.
 
-### 3. Supabase 전환 + 인증 (§70–77) — 사용자 지시로 보류 중, **전환 체크리스트는 6차 조사로 확정 (2026-08-19)**
+### 3. Supabase 전환 + 인증 (§70–77) — **1차 구현 완료 (2026-08-19), E2E 일부 잔여**
+
+구현 완료(설계: docs/superpowers/specs/2026-08-19-supabase-migration-design.md, 사용자 승인):
+- 프로젝트 생성(Seoul, Free) + 스키마 적용 검증 — 11테이블 전부 RLS on, 정책 11,
+  RPC(replace_active_recommendations). anon 읽기=빈 배열/쓰기=42501 차단 실측.
+  마이그레이션: supabase/migrations/20260819000000_init.sql (psql 풀러로 적용).
+- SupabaseRepository(전 메서드, snake_case 매핑, undefined→null 클리어 시맨틱 유지) +
+  getRepository() 로그인 분기(localStorage rive-auth-mode 플래그, 설계 D1 로그인 선택제).
+- removeBookCompletely는 복합 FK cascade로 대체(RPC 불필요 — 설계 §3에서 1개로 축소).
+- 계정 UI: 설정 시트 최상단 계정 섹션(이메일 로그인/가입/로그아웃, 로그인 후 로컬 기록
+  이관 프롬프트). 이관 모듈 migrateLocal.ts(참조 순서 upsert, 로컬 보존+플래그).
+- AI 라우트 3개 인증 게이트(401 실측) + 본문 200K 상한 + excludeTitles 300 상한 +
+  wrapped 입력 화이트리스트. 클라이언트 fetch 3곳 토큰 부착.
+  ※ 설계 편차: books/search·enrich는 게이트 제외 — D1 로컬 모드(비로그인 책 검색)가
+  핵심 루프라 우선. 배포 후 남용 시 재검토.
+- 비로그인 로컬 모드 회귀 실측: Today/Library/Discover 기존 데이터 정상, 계정 섹션 렌더.
+
+**E2E 완료 (2026-08-19, Confirm email 사용자 해제 후)**: 가입 → 즉시 세션 → 이관 프롬프트
+→ 기록 옮기기(서버 psql 검증: 책 6·서재 6·세션 2·인용구 1·설문/프로필/목표·추천 6·리캡 2)
+→ 서버 모드 전 화면(Today/Library/Insights/Discover/상세) → 서버 쓰기(노트 추가,
+DB 확인 후 삭제 정리) → 로그아웃 → 로컬 모드 복귀 + 로컬 데이터 보존. 전 단계 통과.
+테스트 계정: ehgml4523+e2etest@gmail.com (삭제 무방).
+
+**2차(B 항목) 완료 (2026-08-19, 사용자 지시 "B부터 진행 — 소셜은 Google만, 나머지 권장대로")**:
+- B3 Google 로그인: **전 구간 E2E 완료 (2026-08-19)** — 사용자가 Google Cloud OAuth
+  클라이언트 + Supabase 공급자 + Redirect URL(localhost:7001) 설정 완료 후, 버튼 →
+  구글 계정 선택/동의 → 복귀 → AuthSync 서버 모드 전환 → 새 계정(서버 데이터 0)의
+  최초 실행 히어로 표시 → 로그아웃 → 로컬 데이터 복원까지 실측 통과.
+  배포 시 Redirect URLs에 배포 도메인 추가 필요(DEPLOY.md 기재).
+  발견된 엣지(후속): rive-local-migrated 플래그가 기기 전역이라, A 계정으로 이관한
+  기기에서 B 계정으로 로그인하면 이관 버튼이 안 뜸 — 계정별 플래그로 개선 여지.
+- B4 다탭/다기기: Realtime 대신 경량 구현 — LIBRARY_CHANGE_EVENT에 BroadcastChannel
+  다탭 전파 + AuthSync의 창 복귀(visibilitychange) 재조회(서버 모드). 실플로우 E2E:
+  탭A 책 추가/제거 → 탭B(/library) 무이동 반영 확인. Realtime 푸시는 후속 유지.
+- B5 activeSession 충돌: useStartReading에 가드 — 진행 중 세션이 있으면 덮어쓰지 않고
+  /read로 이동(이어읽기). 실측: 다른 책 READ 시도 시 세션 보존 확인.
+- B6 서버 모드 백업 혼동: 설정 데이터 섹션에 "이 기기의 로컬 기록 대상" 캡션(서버 모드
+  한정). **서버 데이터 전체 내보내기는 후속**(서버 자체가 내구 저장이라 우선순위 낮음).
+- B7 rate limit / B8 books 공유 카탈로그: 권장대로 **배포 후 관측 기반으로 보류**.
+
+잔여: **Vercel 배포 — 사용자 지시로 보류, 준비 완료** (docs/DEPLOY.md).
+후속: Google 공급자 콘솔 설정(사용자), Supabase Realtime 푸시, 서버 데이터 내보내기,
+rate limit, books 공유 카탈로그.
+
+#### (기록) 6차 조사 전환 체크리스트 원문
 - 사실: 저장소 경계는 `src/lib/repository/types.ts` 인터페이스로 준비됨 — 6차 전수 검색
   결과 경계 유출 0건(예외는 dataTransfer.ts, 재작성 대상으로 주석 명시됨). 교체 대상은
   dexieRepository.ts 1개 + dataTransfer.ts + discover/page.tsx의 추천 ID 생성 1곳.
