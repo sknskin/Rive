@@ -3,11 +3,15 @@ import type {
   AiProfile,
   AiRecommendation,
   Book,
+  BookNote,
+  BookQuote,
   BookStatus,
   PreferenceProfile,
+  ReadingGoals,
   ReadingSession,
   RecommendationStatus,
   UserBook,
+  WrappedSummary,
 } from "@/lib/types";
 import { ACTIVE_SESSION_ID, AI_PROFILE_ID, PREFERENCE_PROFILE_ID } from "@/lib/constants";
 import { getDb } from "@/lib/db";
@@ -150,13 +154,15 @@ export class DexieRepository implements ReadingRepository {
   }
 
   async removeBookCompletely(bookId: string): Promise<void> {
-    // 책 제거 시 연관 세션·서재 상태를 함께 지워 고아 레코드를 남기지 않는다
-    // Removing a book also deletes its sessions and shelf entry — no orphans
+    // 책 제거 시 연관 세션·노트·인용구·서재 상태를 함께 지워 고아 레코드를 남기지 않는다
+    // Removing a book also deletes its sessions/notes/quotes/shelf entry — no orphans
     await this.db.transaction(
       "rw",
-      [this.db.books, this.db.userBooks, this.db.readingSessions],
+      [this.db.books, this.db.userBooks, this.db.readingSessions, this.db.notes, this.db.quotes],
       async () => {
         await this.db.readingSessions.where("bookId").equals(bookId).delete();
+        await this.db.notes.where("bookId").equals(bookId).delete();
+        await this.db.quotes.where("bookId").equals(bookId).delete();
         await this.db.userBooks.delete(bookId);
         await this.db.books.delete(bookId);
       },
@@ -236,5 +242,51 @@ export class DexieRepository implements ReadingRepository {
     if (updated === 0) {
       throw new Error(`recommendation not found: ${id}`);
     }
+  }
+
+  async addNote(note: Omit<BookNote, "id" | "createdAt">): Promise<BookNote> {
+    const created: BookNote = { ...note, id: crypto.randomUUID(), createdAt: Date.now() };
+    await this.db.notes.add(created);
+    return created;
+  }
+
+  async listNotesForBook(bookId: string): Promise<BookNote[]> {
+    const items = await this.db.notes.where("bookId").equals(bookId).toArray();
+    return items.sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  async deleteNote(id: string): Promise<void> {
+    await this.db.notes.delete(id);
+  }
+
+  async addQuote(quote: Omit<BookQuote, "id" | "createdAt">): Promise<BookQuote> {
+    const created: BookQuote = { ...quote, id: crypto.randomUUID(), createdAt: Date.now() };
+    await this.db.quotes.add(created);
+    return created;
+  }
+
+  async listQuotesForBook(bookId: string): Promise<BookQuote[]> {
+    const items = await this.db.quotes.where("bookId").equals(bookId).toArray();
+    return items.sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  async deleteQuote(id: string): Promise<void> {
+    await this.db.quotes.delete(id);
+  }
+
+  async getGoals(): Promise<ReadingGoals | undefined> {
+    return this.db.goals.get("current");
+  }
+
+  async saveGoals(goals: Omit<ReadingGoals, "id">): Promise<void> {
+    await this.db.goals.put({ ...goals, id: "current" });
+  }
+
+  async getWrapped(id: string): Promise<WrappedSummary | undefined> {
+    return this.db.wrapped.get(id);
+  }
+
+  async saveWrapped(entry: WrappedSummary): Promise<void> {
+    await this.db.wrapped.put(entry);
   }
 }

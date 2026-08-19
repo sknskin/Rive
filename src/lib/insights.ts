@@ -217,12 +217,18 @@ export function genreDistribution(
   const totals = new Map<string, number>();
   for (const session of sessions) {
     const categories = categoriesByBookId.get(session.bookId) ?? [];
+    if (categories.length === 0) {
+      continue;
+    }
+    // 한 세션의 시간을 카테고리 수로 나눠 배분해 합계 부풀림을 막는다
+    // Split a session's time across its categories to avoid inflated totals
+    const share = session.durationSeconds / categories.length;
     for (const category of categories) {
-      totals.set(category, (totals.get(category) ?? 0) + session.durationSeconds);
+      totals.set(category, (totals.get(category) ?? 0) + share);
     }
   }
   return [...totals.entries()]
-    .map(([name, totalSeconds]) => ({ name, totalSeconds }))
+    .map(([name, totalSeconds]) => ({ name, totalSeconds: Math.round(totalSeconds) }))
     .sort((a, b) => b.totalSeconds - a.totalSeconds)
     .slice(0, topN);
 }

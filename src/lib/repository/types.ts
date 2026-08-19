@@ -3,11 +3,15 @@ import type {
   AiProfile,
   AiRecommendation,
   Book,
+  BookNote,
+  BookQuote,
   BookStatus,
   PreferenceProfile,
+  ReadingGoals,
   ReadingSession,
   RecommendationStatus,
   UserBook,
+  WrappedSummary,
 } from "@/lib/types";
 
 // 저장소 인터페이스 — Supabase 전환 시 이 경계만 교체한다
@@ -56,4 +60,23 @@ export interface ReadingRepository {
     id: string,
     patch: { status: RecommendationStatus; feedbackReason?: string },
   ): Promise<void>;
+
+  // 노트/인용구 (스펙 §27)
+  // Notes/quotes (spec §27)
+  addNote(note: Omit<BookNote, "id" | "createdAt">): Promise<BookNote>;
+  listNotesForBook(bookId: string): Promise<BookNote[]>;
+  deleteNote(id: string): Promise<void>;
+  addQuote(quote: Omit<BookQuote, "id" | "createdAt">): Promise<BookQuote>;
+  listQuotesForBook(bookId: string): Promise<BookQuote[]>;
+  deleteQuote(id: string): Promise<void>;
+
+  // 연간 목표 (스펙 §36)
+  // Annual goals (spec §36)
+  getGoals(): Promise<ReadingGoals | undefined>;
+  saveGoals(goals: Omit<ReadingGoals, "id">): Promise<void>;
+
+  // 리캡 AI 요약 캐시 (스펙 §58, §65)
+  // Wrapped AI-summary cache (spec §58, §65)
+  getWrapped(id: string): Promise<WrappedSummary | undefined>;
+  saveWrapped(entry: WrappedSummary): Promise<void>;
 }

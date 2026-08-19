@@ -91,6 +91,31 @@ export const NOT_INTERESTED_REASONS = [
   "지금은 읽고 싶지 않음",
 ] as const;
 
+// 기분/시간 맞춤 추천 선택지 (스펙 §53–54)
+// Mood / time-based recommendation options (spec §53–54)
+export const MOOD_OPTIONS = [
+  "가볍게 읽고 싶어요",
+  "몰입해서 읽고 싶어요",
+  "위로받고 싶어요",
+  "새로운 걸 배우고 싶어요",
+  "생각할 거리가 필요해요",
+] as const;
+
+export const TIME_OPTIONS = ["15분", "30분", "1시간", "주말 내내"] as const;
+
+// 온보딩 선택 응답 옵션 (스펙 §40–41)
+// Optional onboarding answer options (spec §40–41)
+export const AGE_RANGE_OPTIONS = ["10대", "20대", "30대", "40대", "50대 이상"] as const;
+export const GENDER_OPTIONS = ["여성", "남성", "응답하지 않음"] as const;
+
+// 완독 추가 평가 항목 (스펙 §25)
+// Extra finish-evaluation items (spec §25)
+export const EXTRA_RATING_ITEMS = [
+  { key: "fun", label: "재미" },
+  { key: "immersion", label: "몰입도" },
+  { key: "difficulty", label: "난이도" },
+] as const;
+
 // 추천 개수와 캐시 레코드 고정 키
 // Recommendation count and fixed cache record keys
 export const RECOMMENDATION_COUNT = 5;

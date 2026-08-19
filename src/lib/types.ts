@@ -33,6 +33,52 @@ export interface UserBook {
   // Finished rating (1–5) and DNF reason — key data for AI taste analysis (spec §25–26)
   rating?: number;
   dnfReason?: string;
+  // 완독 추가 평가(재미/몰입도/난이도, 각 1–5) — 선택 입력 (스펙 §25)
+  // Optional extra finish ratings (fun/immersion/difficulty, 1–5 each) (spec §25)
+  extraRatings?: { fun?: number; immersion?: number; difficulty?: number };
+  // Up Next 지정 시각 — 존재하면 다음에 읽을 책 (스펙 §37)
+  // Up Next timestamp — present means queued to read next (spec §37)
+  upNextAt?: number;
+  // 완독 목표일 (Reading Plan, 스펙 §82)
+  // Target finish date (reading plan, spec §82)
+  targetDate?: number;
+}
+
+// 자유 노트와 인용구 (스펙 §27)
+// Free-form notes and quotes (spec §27)
+export interface BookNote {
+  id: string;
+  bookId: string;
+  content: string;
+  createdAt: number;
+}
+
+export interface BookQuote {
+  id: string;
+  bookId: string;
+  page: number;
+  quote: string;
+  comment: string;
+  createdAt: number;
+}
+
+// 연간 독서 목표 — 0은 미설정 (스펙 §36)
+// Annual reading goals — 0 means unset (spec §36)
+export interface ReadingGoals {
+  id: "current";
+  year: number;
+  targetBooks: number;
+  targetPages: number;
+  targetHours: number;
+  updatedAt: number;
+}
+
+// 월간/연간 리캡의 AI 요약 캐시 — id는 '2026-08' 또는 '2026' (스펙 §58)
+// Cached AI summary for monthly/annual wrapped — id like '2026-08' or '2026' (spec §58)
+export interface WrappedSummary {
+  id: string;
+  summary: string;
+  generatedAt: number;
 }
 
 export interface ReadingSession {
@@ -95,7 +141,20 @@ export interface PreferenceProfile {
   dislikedBooks: BookRef[];
   fictionPreference: FictionPreference;
   readingPurposes: string[];
+  // 선택 응답 — 추천 가중치는 낮게 유지 (스펙 §40–41)
+  // Optional answers — kept low-weight in recommendations (spec §40–41)
+  ageRange?: string;
+  gender?: string;
   updatedAt: number;
+}
+
+// Reading DNA 4축 (0–100, 스펙 §55)
+// Four reading-DNA axes (0–100, spec §55)
+export interface ReadingDna {
+  fiction: number;
+  depth: number;
+  emotion: number;
+  exploration: number;
 }
 
 export interface AiGenreScore {
@@ -113,10 +172,20 @@ export interface AiProfile {
   traits: string[];
   recommendationFactors: string[];
   evidence: string[];
+  // 취향 변화 서술(§47), DNA 4축(§55), Book Twin(§57) — 분석 1회에 함께 생성
+  // Taste changes (§47), DNA axes (§55), book twin (§57) — produced in one analysis
+  tasteChanges?: string[];
+  dna?: ReadingDna;
+  bookTwin?: { title: string; reason: string };
   analyzedAt: number;
 }
 
-export type RecommendationStatus = "active" | "want" | "notInterested" | "alreadyRead";
+export type RecommendationStatus =
+  | "active"
+  | "want"
+  | "liked"
+  | "notInterested"
+  | "alreadyRead";
 
 // AI 추천 캐시 + 피드백 상태 (스펙 §48–50, §76)
 // Cached AI recommendation with feedback state (spec §48–50, §76)
@@ -125,6 +194,9 @@ export interface AiRecommendation {
   book: BookSearchResult;
   matchPercent: number;
   reason: string;
+  // 추천 카테고리 — For You / Because You Loved / Quick Read 등 (스펙 §52)
+  // Recommendation category (spec §52)
+  category?: string;
   generatedAt: number;
   status: RecommendationStatus;
   feedbackReason?: string;

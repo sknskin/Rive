@@ -198,7 +198,7 @@ describe("estimateDaysToFinish", () => {
 });
 
 describe("genreDistribution", () => {
-  it("독서 시간을 책 카테고리에 배분해 내림차순으로 반환한다", () => {
+  it("독서 시간을 카테고리 수로 나눠 배분해 내림차순으로 반환한다", () => {
     const sessions = [
       makeSession({ bookId: "a", durationSeconds: 600 }),
       makeSession({ bookId: "a", durationSeconds: 300 }),
@@ -209,8 +209,9 @@ describe("genreDistribution", () => {
       ["b", ["Science", "History"]],
     ]);
     const result = genreDistribution(sessions, categories);
-    expect(result[0]).toEqual({ name: "History", totalSeconds: 1100 });
-    expect(result[1]).toEqual({ name: "Science", totalSeconds: 200 });
+    // b의 200초는 두 카테고리에 100초씩 분배된다
+    expect(result[0]).toEqual({ name: "History", totalSeconds: 1000 });
+    expect(result[1]).toEqual({ name: "Science", totalSeconds: 100 });
   });
 
   it("카테고리 없는 책만 있으면 빈 배열을 반환한다", () => {

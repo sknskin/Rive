@@ -4,9 +4,13 @@ import type {
   AiProfile,
   AiRecommendation,
   Book,
+  BookNote,
+  BookQuote,
   PreferenceProfile,
+  ReadingGoals,
   ReadingSession,
   UserBook,
+  WrappedSummary,
 } from "@/lib/types";
 import { DB_NAME } from "@/lib/constants";
 
@@ -20,6 +24,10 @@ export class RiveDatabase extends Dexie {
   preferences!: EntityTable<PreferenceProfile, "id">;
   aiProfiles!: EntityTable<AiProfile, "id">;
   recommendations!: EntityTable<AiRecommendation, "id">;
+  notes!: EntityTable<BookNote, "id">;
+  quotes!: EntityTable<BookQuote, "id">;
+  goals!: EntityTable<ReadingGoals, "id">;
+  wrapped!: EntityTable<WrappedSummary, "id">;
 
   constructor() {
     super(DB_NAME);
@@ -35,6 +43,14 @@ export class RiveDatabase extends Dexie {
       preferences: "id",
       aiProfiles: "id",
       recommendations: "id, status, generatedAt",
+    });
+    // v3: 노트/인용구, 연간 목표, 리캡 캐시 (기존 테이블 변경 없음)
+    // v3: notes/quotes, annual goals, wrapped cache (existing tables untouched)
+    this.version(3).stores({
+      notes: "id, bookId",
+      quotes: "id, bookId",
+      goals: "id",
+      wrapped: "id",
     });
   }
 }
