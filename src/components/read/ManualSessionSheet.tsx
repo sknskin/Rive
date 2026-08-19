@@ -44,7 +44,7 @@ export default function ManualSessionSheet({
   editSession,
 }: ManualSessionSheetProps) {
   return (
-    <BottomSheet open={open} onClose={onClose}>
+    <BottomSheet open={open} onClose={onClose} label="기록 추가">
       <ManualSessionContent
         onClose={onClose}
         onSaved={onSaved}
@@ -276,7 +276,7 @@ function ManualSessionContent({
                   setSelected(pickable);
                   setStartPageText(String(pickable.suggestedPage));
                 }}
-                className="flex w-full items-center gap-3.5 rounded-xl p-2 text-left active:bg-fill"
+                className="flex w-full cursor-pointer items-center gap-3.5 rounded-xl p-2 text-left active:bg-fill"
               >
                 <BookCover
                   title={pickable.book.title}
@@ -391,7 +391,7 @@ function ManualSessionContent({
         whileTap={{ scale: 0.97 }}
         disabled={!formValid || saving}
         onClick={() => void handleSave()}
-        className="mt-5 w-full rounded-2xl bg-accent py-4 text-lg font-semibold text-accent-ink disabled:opacity-40"
+        className="mt-5 w-full cursor-pointer rounded-2xl bg-accent py-4 text-lg font-semibold tracking-wide text-accent-ink shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
       >
         {saving ? "저장하는 중…" : "저장"}
       </motion.button>

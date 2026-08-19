@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
+import PageSkeleton from "@/components/PageSkeleton";
 import BottomSheet from "@/components/BottomSheet";
 import RatingStars from "@/components/library/RatingStars";
 import EndPageSheet from "@/components/read/EndPageSheet";
@@ -175,7 +176,7 @@ export default function ReadPage() {
   }
 
   if (!active) {
-    return <main className="flex-1" />;
+    return <PageSkeleton />;
   }
 
   return (
@@ -219,7 +220,11 @@ export default function ReadPage() {
         onDiscard={() => void handleDiscard()}
       />
 
-      <BottomSheet open={ratingBookId !== null} onClose={() => router.replace("/")}>
+      <BottomSheet
+        open={ratingBookId !== null}
+        onClose={() => router.replace("/")}
+        label="완독 평가"
+      >
         {!extraStep ? (
           <div className="px-2 pt-2 text-center">
             <h2 className="text-lg font-semibold tracking-tight">한 권을 다 읽었어요, 축하해요</h2>
@@ -280,7 +285,11 @@ export default function ReadPage() {
         )}
       </BottomSheet>
 
-      <BottomSheet open={shortWarnOpen} onClose={() => setShortWarnOpen(false)}>
+      <BottomSheet
+        open={shortWarnOpen}
+        onClose={() => setShortWarnOpen(false)}
+        label="짧은 세션 안내"
+      >
         <div className="px-2 pt-2 text-center">
           <h2 className="text-lg font-semibold tracking-tight">아직 기록이 짧아요.</h2>
           <p className="mt-2 text-[15px] text-ink-secondary">
@@ -290,14 +299,14 @@ export default function ReadPage() {
             <button
               type="button"
               onClick={handleResume}
-              className="w-full rounded-2xl bg-accent py-3.5 text-[15px] font-semibold text-accent-ink"
+              className="w-full cursor-pointer rounded-2xl bg-accent py-3.5 text-[15px] font-semibold text-accent-ink"
             >
               이어서 읽기
             </button>
             <button
               type="button"
               onClick={() => void handleDiscard()}
-              className="w-full rounded-2xl bg-fill py-3.5 text-[15px] font-semibold text-danger"
+              className="w-full cursor-pointer rounded-2xl bg-fill py-3.5 text-[15px] font-semibold text-danger"
             >
               기록하지 않고 종료
             </button>

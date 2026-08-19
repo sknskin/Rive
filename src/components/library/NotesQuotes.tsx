@@ -21,6 +21,7 @@ export default function NotesQuotes({ bookId }: NotesQuotesProps) {
   const [loadError, setLoadError] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ kind: EntryKind; id: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -52,10 +53,13 @@ export default function NotesQuotes({ bookId }: NotesQuotesProps) {
     };
   }, [bookId, reloadKey]);
 
+  // 삭제 진행 중 중복 실행 방지 — 저장 경로의 saving 가드와 대칭 (6차 조사 D1)
+  // Prevent duplicate deletes in flight — mirrors the save path's saving guard (audit 6 D1)
   async function handleDelete() {
-    if (!deleteTarget) {
+    if (!deleteTarget || deleting) {
       return;
     }
+    setDeleting(true);
     try {
       const repository = getRepository();
       if (deleteTarget.kind === "note") {
@@ -69,6 +73,8 @@ export default function NotesQuotes({ bookId }: NotesQuotesProps) {
       console.error("[NotesQuotes] failed to delete:", error);
       setLoadError("삭제하지 못했어요. 다시 시도해 주세요.");
       setDeleteTarget(null);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -137,7 +143,7 @@ export default function NotesQuotes({ bookId }: NotesQuotesProps) {
         </ul>
       )}
 
-      <BottomSheet open={addOpen} onClose={() => setAddOpen(false)}>
+      <BottomSheet open={addOpen} onClose={() => setAddOpen(false)} label="노트 추가">
         <AddEntryForm
           bookId={bookId}
           onSaved={() => {
@@ -147,7 +153,11 @@ export default function NotesQuotes({ bookId }: NotesQuotesProps) {
         />
       </BottomSheet>
 
-      <BottomSheet open={deleteTarget !== null} onClose={() => setDeleteTarget(null)}>
+      <BottomSheet
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        label="삭제 확인"
+      >
         <div className="px-2 pt-2 text-center">
           <h2 className="text-lg font-semibold tracking-tight">
             이 {deleteTarget?.kind === "quote" ? "인용구" : "노트"}를 삭제할까요?
@@ -227,6 +237,7 @@ function AddEntryForm({ bookId, onSaved }: { bookId: string; onSaved: () => void
           <button
             key={option.value}
             type="button"
+            aria-pressed={kind === option.value}
             onClick={() => setKind(option.value)}
             className={`cursor-pointer rounded-full px-4 py-1.5 text-[13px] font-semibold transition-colors duration-150 ${
               kind === option.value ? "bg-accent text-accent-ink" : "bg-fill text-ink-secondary"
@@ -240,6 +251,7 @@ function AddEntryForm({ bookId, onSaved }: { bookId: string; onSaved: () => void
       <div className="mt-4 flex flex-col gap-3">
         <textarea
           value={text}
+          aria-label={kind === "quote" ? "인용구 내용" : "노트 내용"}
           onChange={(event) => setText(event.target.value)}
           placeholder={kind === "quote" ? "인상 깊었던 문장" : "자유롭게 생각을 남겨보세요"}
           rows={3}
@@ -253,6 +265,7 @@ function AddEntryForm({ bookId, onSaved }: { bookId: string; onSaved: () => void
               inputMode="numeric"
               min={1}
               value={pageText}
+              aria-label="페이지"
               onChange={(event) => setPageText(event.target.value)}
               placeholder="페이지"
               className={`nums ${inputClass}`}
@@ -260,6 +273,7 @@ function AddEntryForm({ bookId, onSaved }: { bookId: string; onSaved: () => void
             <input
               type="text"
               value={comment}
+              aria-label="코멘트"
               onChange={(event) => setComment(event.target.value)}
               placeholder="코멘트 (선택)"
               className={inputClass}

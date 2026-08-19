@@ -13,7 +13,7 @@ interface NotInterestedSheetProps {
 // Not-interested reason picker — used as negative-preference data (spec §50)
 export default function NotInterestedSheet({ open, onClose, onSelect }: NotInterestedSheetProps) {
   return (
-    <BottomSheet open={open} onClose={onClose}>
+    <BottomSheet open={open} onClose={onClose} label="관심 없어요 이유">
       <div className="px-2">
         <h2 className="px-1 pt-2 text-lg font-semibold tracking-tight">
           어떤 점이 맞지 않았나요?
@@ -24,7 +24,7 @@ export default function NotInterestedSheet({ open, onClose, onSelect }: NotInter
               <button
                 type="button"
                 onClick={() => onSelect(reason)}
-                className="w-full rounded-xl px-3 py-3.5 text-left text-[15px] font-medium active:bg-fill"
+                className="w-full cursor-pointer rounded-xl px-3 py-3.5 text-left text-[15px] font-medium active:bg-fill"
               >
                 {reason}
               </button>

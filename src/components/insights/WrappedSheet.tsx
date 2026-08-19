@@ -18,7 +18,7 @@ interface WrappedSheetProps {
 
 export default function WrappedSheet({ open, onClose, stats }: WrappedSheetProps) {
   return (
-    <BottomSheet open={open} onClose={onClose}>
+    <BottomSheet open={open} onClose={onClose} label="독서 리캡">
       {stats && <WrappedContent stats={stats} />}
     </BottomSheet>
   );
@@ -86,6 +86,9 @@ function WrappedContent({ stats }: { stats: WrappedStats }) {
       canvas.height = CARD_HEIGHT;
       const ctx = canvas.getContext("2d");
       if (!ctx) {
+        // 캔버스 컨텍스트 확보 실패도 사용자에게 알린다 (5차 조사 L7)
+        // Surface canvas-context failure to the user as well (audit 5 L7)
+        setAiError("이미지를 만들지 못했어요.");
         return;
       }
       ctx.fillStyle = "#111113";
@@ -125,6 +128,8 @@ function WrappedContent({ stats }: { stats: WrappedStats }) {
 
       canvas.toBlob((blob) => {
         if (!blob) {
+          console.error("[Wrapped] canvas.toBlob returned null");
+          setAiError("이미지를 만들지 못했어요.");
           return;
         }
         const url = URL.createObjectURL(blob);

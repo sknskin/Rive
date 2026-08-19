@@ -14,7 +14,7 @@ interface ThemeSheetProps {
 // Settings sheet — theme mode plus data backup/restore (spec §0-8, §82)
 export default function ThemeSheet({ open, onClose }: ThemeSheetProps) {
   return (
-    <BottomSheet open={open} onClose={onClose}>
+    <BottomSheet open={open} onClose={onClose} label="설정">
       {/* 시트가 닫히면 내용이 언마운트되어 다음에 열 때 저장값을 새로 읽는다 */}
       {/* Content unmounts on close, so reopening reads the stored value fresh */}
       <ThemeSheetContent onClose={onClose} />

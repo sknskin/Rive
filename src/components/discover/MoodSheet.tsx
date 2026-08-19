@@ -15,7 +15,7 @@ interface MoodSheetProps {
 // Mood/time-tailored recommendation — every choice is optional (spec §53–54)
 export default function MoodSheet({ open, onClose, onSubmit }: MoodSheetProps) {
   return (
-    <BottomSheet open={open} onClose={onClose}>
+    <BottomSheet open={open} onClose={onClose} label="기분 맞춤 추천">
       <MoodContent onSubmit={onSubmit} />
     </BottomSheet>
   );
@@ -42,6 +42,7 @@ function MoodContent({ onSubmit }: Pick<MoodSheetProps, "onSubmit">) {
           <button
             key={option}
             type="button"
+            aria-pressed={mood === option}
             onClick={() => setMood(mood === option ? null : option)}
             className={chipClass(mood === option)}
           >
@@ -58,6 +59,7 @@ function MoodContent({ onSubmit }: Pick<MoodSheetProps, "onSubmit">) {
           <button
             key={option}
             type="button"
+            aria-pressed={time === option}
             onClick={() => setTime(time === option ? null : option)}
             className={chipClass(time === option)}
           >

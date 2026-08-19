@@ -30,7 +30,7 @@ interface AddBookSheetProps {
 
 export default function AddBookSheet({ open, onClose }: AddBookSheetProps) {
   return (
-    <BottomSheet open={open} onClose={onClose}>
+    <BottomSheet open={open} onClose={onClose} label="책 추가">
       {/* 닫히면 언마운트되어 상태가 초기화된다 */}
       {/* Unmounts on close, resetting state */}
       <AddBookContent onClose={onClose} />
