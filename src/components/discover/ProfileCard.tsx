@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { formatShortDate, formatTimeOfDay } from "@/lib/format";
 import type { AiProfile } from "@/lib/types";
 
 interface ProfileCardProps {
@@ -30,6 +31,9 @@ export default function ProfileCard({ profile, analyzing, onReanalyze }: Profile
 
       <p className="mt-2 text-[15px] leading-relaxed break-keep text-ink-secondary">
         {profile.summary}
+      </p>
+      <p className="nums mt-1.5 text-xs text-ink-tertiary">
+        {formatShortDate(profile.analyzedAt)} {formatTimeOfDay(profile.analyzedAt)} 분석
       </p>
 
       {profile.genres.length > 0 && (

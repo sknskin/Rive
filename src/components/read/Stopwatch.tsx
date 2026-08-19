@@ -38,7 +38,7 @@ export default function Stopwatch({ startedAt, stoppedAt }: StopwatchProps) {
   const elapsedSeconds = Math.max(0, (referenceMs - startedAt) / MS_PER_SECOND);
 
   return (
-    <p className="nums text-[64px] leading-none font-extralight tracking-tight">
+    <p className="nums text-[64px] leading-none font-extralight tracking-tight md:text-[84px]">
       {formatStopwatch(elapsedSeconds)}
     </p>
   );

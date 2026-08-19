@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import BookCover from "@/components/BookCover";
 import type { AiRecommendation } from "@/lib/types";
 
@@ -53,29 +54,35 @@ export default function RecommendationCard({
       )}
 
       {status === "want" ? (
-        <p className="mt-3 py-1.5 text-center text-sm font-medium text-tint">
-          읽고 싶은 책에 담았어요 ✓
-        </p>
+        <div className="mt-3 flex items-center justify-center gap-3 py-1.5 text-sm">
+          <span className="font-medium text-tint">읽고 싶은 책에 담았어요 ✓</span>
+          <Link
+            href="/library?status=want"
+            className="font-semibold text-ink-secondary underline-offset-2 hover:underline active:opacity-70"
+          >
+            서재에서 보기
+          </Link>
+        </div>
       ) : (
         <div className="mt-3 flex gap-2">
           <button
             type="button"
             onClick={onWantToRead}
-            className="flex-1 rounded-xl bg-accent py-2.5 text-sm font-semibold text-accent-ink active:opacity-80"
+            className="flex-1 cursor-pointer rounded-xl bg-accent px-1 py-2.5 text-[13px] font-semibold whitespace-nowrap text-accent-ink active:opacity-80"
           >
             읽고 싶어요
           </button>
           <button
             type="button"
             onClick={onAlreadyRead}
-            className="flex-1 rounded-xl bg-fill py-2.5 text-sm font-medium text-ink-secondary active:opacity-70"
+            className="flex-1 cursor-pointer rounded-xl bg-fill px-1 py-2.5 text-[13px] font-medium break-keep whitespace-nowrap text-ink-secondary active:opacity-70"
           >
             이미 읽었어요
           </button>
           <button
             type="button"
             onClick={onNotInterested}
-            className="flex-1 rounded-xl bg-fill py-2.5 text-sm font-medium text-ink-secondary active:opacity-70"
+            className="flex-1 cursor-pointer rounded-xl bg-fill px-1 py-2.5 text-[13px] font-medium break-keep whitespace-nowrap text-ink-secondary active:opacity-70"
           >
             관심 없어요
           </button>

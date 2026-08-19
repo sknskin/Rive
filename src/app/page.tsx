@@ -4,10 +4,10 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import ReadSheet from "@/components/read/ReadSheet";
-import ThemeSheet from "@/components/ThemeSheet";
 import CurrentlyReading from "@/components/today/CurrentlyReading";
 import TodaySessions, { type SessionRow } from "@/components/today/TodaySessions";
-import { dayRange, greetingForHour } from "@/lib/format";
+import { dayRange, greetingForDate } from "@/lib/format";
+import { subscribeLibraryChange } from "@/lib/libraryEvents";
 import { getRepository } from "@/lib/repository";
 import type { Book, UserBook } from "@/lib/types";
 
@@ -23,7 +23,21 @@ export default function TodayPage() {
   const [rows, setRows] = useState<SessionRow[]>([]);
   const [loadError, setLoadError] = useState("");
   const [readOpen, setReadOpen] = useState(false);
-  const [themeOpen, setThemeOpen] = useState(false);
+  const [now, setNow] = useState(() => new Date());
+  const [reloadKey, setReloadKey] = useState(0);
+
+  // 전역 + 버튼으로 책이 추가되면 Currently Reading을 즉시 갱신한다
+  // Refresh Currently Reading in place after a global book add
+  useEffect(() => {
+    return subscribeLibraryChange(() => setReloadKey((key) => key + 1));
+  }, []);
+
+  // 인사말이 시간대 경계를 넘으면 실시간으로 바뀌도록 1분마다 갱신한다
+  // Refresh every minute so the greeting changes live across slot boundaries
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -75,84 +89,76 @@ export default function TodayPage() {
     return () => {
       cancelled = true;
     };
-  }, [router, readOpen]);
+  }, [router, readOpen, reloadKey]);
 
-  const greeting = greetingForHour(new Date().getHours());
+  const greeting = greetingForDate(now);
 
   return (
     <main
-      className={`flex-1 px-5 pt-16 pb-36 transition-opacity duration-300 ${
+      className={`flex-1 px-5 pt-8 pb-20 transition-opacity duration-300 ${
         ready ? "opacity-100" : "opacity-0"
       }`}
     >
-      <div className="flex items-center justify-between">
-        <p className="text-[15px] text-ink-secondary">{greeting}.</p>
-        <button
-          type="button"
-          aria-label="화면 모드 설정"
-          onClick={() => setThemeOpen(true)}
-          className="-mr-1.5 flex size-8 items-center justify-center rounded-full text-ink-tertiary active:bg-fill"
-        >
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.7"
-            strokeLinecap="round"
-          >
-            <circle cx="12" cy="12" r="8.5" />
-            <path d="M12 3.5v17" />
-            <path d="M12 3.5a8.5 8.5 0 0 1 0 17" fill="currentColor" stroke="none" />
-          </svg>
-        </button>
-      </div>
+      <p className="text-[15px] text-ink-secondary">{greeting}</p>
 
       {loadError !== "" && <p className="mt-6 text-sm text-danger">{loadError}</p>}
 
-      {current ? (
-        <div className="mt-8">
-          <CurrentlyReading book={current.book} userBook={current.userBook} />
+      {/* 데스크톱: 좌측 현재 책+READ / 우측 오늘의 기록 2단 배치 */}
+      {/* Desktop: two columns — current book + READ left, today's sessions right */}
+      <div className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-14">
+        <div>
+          {current ? (
+            <div className="mt-8">
+              <CurrentlyReading book={current.book} userBook={current.userBook} />
+            </div>
+          ) : (
+            ready &&
+            loadError === "" && (
+              <div className="mt-16 text-center lg:mt-8 lg:text-left">
+                <p className="text-xl font-semibold tracking-tight">
+                  오늘의 첫 페이지,
+                  <br />
+                  같이 열어볼까요?
+                </p>
+                <p className="mt-3 text-[15px] leading-relaxed text-ink-secondary">
+                  아래 READ를 누르면
+                  <br />
+                  바로 독서가 시작돼요
+                </p>
+              </div>
+            )
+          )}
+
+          <motion.button
+            type="button"
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setReadOpen(true)}
+            className="mt-10 w-full cursor-pointer rounded-2xl bg-accent py-4 text-lg font-semibold tracking-wide text-accent-ink shadow-sm"
+          >
+            READ
+          </motion.button>
         </div>
-      ) : (
-        ready &&
-        loadError === "" && (
-          <div className="mt-16 text-center">
-            <p className="text-xl font-semibold tracking-tight">
-              첫 책과 함께 시작해 보세요.
-            </p>
-            <p className="mt-2 text-[15px] text-ink-secondary">
-              READ를 누르면 바로 읽기 시작할 수 있어요.
-            </p>
-          </div>
-        )
-      )}
 
-      <motion.button
-        type="button"
-        whileTap={{ scale: 0.97 }}
-        onClick={() => setReadOpen(true)}
-        className="mt-10 w-full rounded-2xl bg-accent py-4 text-lg font-semibold tracking-wide text-accent-ink shadow-sm"
-      >
-        READ
-      </motion.button>
-
-      <div className="mt-12">
-        {rows.length > 0 ? (
-          <TodaySessions rows={rows} />
-        ) : (
-          ready &&
-          loadError === "" && (
-            <p className="text-center text-sm text-ink-tertiary">
-              오늘 아직 읽은 기록이 없어요.
-            </p>
-          )
-        )}
+        <div className="mt-12 lg:mt-8">
+          {rows.length > 0 ? (
+            <TodaySessions rows={rows} />
+          ) : (
+            ready &&
+            loadError === "" && (
+              <div className="text-center lg:text-left">
+                <p className="text-[15px] font-medium text-ink-secondary">
+                  오늘은 아직 기록이 없어요
+                </p>
+                <p className="mt-2 text-sm leading-relaxed text-ink-tertiary">
+                  짧게 한 장이라도 괜찮아요, 그게 시작이에요
+                </p>
+              </div>
+            )
+          )}
+        </div>
       </div>
 
       <ReadSheet open={readOpen} onClose={() => setReadOpen(false)} />
-      <ThemeSheet open={themeOpen} onClose={() => setThemeOpen(false)} />
     </main>
   );
 }

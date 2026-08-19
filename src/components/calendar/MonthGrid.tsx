@@ -69,7 +69,7 @@ export default function MonthGrid({
               key={day}
               type="button"
               onClick={() => onSelectDay(day)}
-              className={`flex min-h-16 flex-col items-center gap-0.5 rounded-xl pt-1 pb-1.5 transition-colors duration-150 ${
+              className={`flex min-h-16 cursor-pointer flex-col items-center gap-0.5 rounded-xl pt-1 pb-1.5 transition-colors duration-150 md:min-h-20 md:hover:bg-fill/60 ${
                 isSelected ? "bg-fill" : ""
               } ${isFuture ? "opacity-40" : ""}`}
             >

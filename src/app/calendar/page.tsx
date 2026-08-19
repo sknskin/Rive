@@ -24,60 +24,71 @@ export default function CalendarPage() {
   }
 
   return (
-    <main className="flex-1 px-5 pt-14 pb-36">
-      <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">
-          {year}년 {month + 1}월
-        </h1>
-        <div className="flex gap-1">
-          <button
-            type="button"
-            aria-label="이전 달"
-            onClick={() => moveMonth(-1)}
-            className="flex size-9 items-center justify-center rounded-full text-lg text-tint active:bg-fill"
+    <main className="flex-1 px-5 pt-8 pb-20">
+      {/* 데스크톱: 좌측 캘린더 / 우측 날짜 상세 2단 배치 */}
+      {/* Desktop: two columns — calendar left, day detail right */}
+      <div className="lg:grid lg:grid-cols-[1.15fr_1fr] lg:items-start lg:gap-12">
+        <div>
+          <header className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold tracking-tight">
+              {year}년 {month + 1}월
+            </h1>
+            <div className="flex gap-1">
+              <button
+                type="button"
+                aria-label="이전 달"
+                onClick={() => moveMonth(-1)}
+                className="flex size-9 cursor-pointer items-center justify-center rounded-full text-lg text-tint active:bg-fill"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                aria-label="다음 달"
+                onClick={() => moveMonth(1)}
+                className="flex size-9 cursor-pointer items-center justify-center rounded-full text-lg text-tint active:bg-fill"
+              >
+                ›
+              </button>
+            </div>
+          </header>
+
+          {error !== "" && <p className="mt-6 text-sm text-danger">{error}</p>}
+
+          <div
+            className={`mt-6 transition-opacity duration-300 ${loading ? "opacity-40" : "opacity-100"}`}
           >
-            ‹
-          </button>
-          <button
-            type="button"
-            aria-label="다음 달"
-            onClick={() => moveMonth(1)}
-            className="flex size-9 items-center justify-center rounded-full text-lg text-tint active:bg-fill"
-          >
-            ›
-          </button>
+            <MonthGrid
+              year={year}
+              month={month}
+              days={days}
+              selectedDay={selectedDay}
+              onSelectDay={setSelectedDay}
+            />
+          </div>
         </div>
-      </header>
 
-      {error !== "" && <p className="mt-6 text-sm text-danger">{error}</p>}
+        <div className="mt-6 lg:mt-1 lg:[&_section]:border-t-0 lg:[&_section]:pt-0">
+          {selectedDay !== null && (
+            <DayDetail
+              year={year}
+              month={month}
+              day={selectedDay}
+              summary={days.get(selectedDay)}
+            />
+          )}
 
-      <div
-        className={`mt-6 transition-opacity duration-300 ${loading ? "opacity-40" : "opacity-100"}`}
-      >
-        <MonthGrid
-          year={year}
-          month={month}
-          days={days}
-          selectedDay={selectedDay}
-          onSelectDay={setSelectedDay}
-        />
+          {selectedDay !== null && (
+            <button
+              type="button"
+              onClick={() => setManualOpen(true)}
+              className="mt-4 cursor-pointer text-sm font-medium text-tint active:opacity-70"
+            >
+              + 기록 추가
+            </button>
+          )}
+        </div>
       </div>
-
-      <div className="mt-6">
-        {selectedDay !== null && (
-          <DayDetail year={year} month={month} day={selectedDay} summary={days.get(selectedDay)} />
-        )}
-      </div>
-
-      {selectedDay !== null && (
-        <button
-          type="button"
-          onClick={() => setManualOpen(true)}
-          className="mt-4 text-sm font-medium text-tint active:opacity-70"
-        >
-          + 기록 추가
-        </button>
-      )}
 
       <ManualSessionSheet
         open={manualOpen}

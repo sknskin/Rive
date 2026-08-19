@@ -36,7 +36,14 @@ export default function DayDetail({ year, month, day, summary }: DayDetailProps)
       <h2 className="text-[15px] font-semibold tracking-tight">{heading}</h2>
 
       {!summary || summary.items.length === 0 ? (
-        <p className="py-6 text-center text-sm text-ink-tertiary">이날은 기록이 없어요.</p>
+        <div className="py-8 text-center">
+          <p className="text-[15px] font-medium text-ink-secondary">
+            이날은 기록 없이 지나갔어요
+          </p>
+          <p className="mt-2 text-sm leading-relaxed text-ink-tertiary">
+            괜찮아요, 쉬어가는 날도 필요하니까요
+          </p>
+        </div>
       ) : (
         <ul className="mt-1 divide-y divide-separator">
           {summary.items.map(({ session, book }) => (

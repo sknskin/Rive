@@ -16,6 +16,8 @@ import type {
   ProfileResponse,
   RecommendResponse,
 } from "@/lib/ai/contracts";
+import { enrichBookMeta } from "@/lib/enrichBook";
+import { notifyLibraryChange } from "@/lib/libraryEvents";
 import { getRepository } from "@/lib/repository";
 import type { AiProfile, AiRecommendation } from "@/lib/types";
 
@@ -171,6 +173,8 @@ export default function DiscoverPage() {
       // Register the recommended book into Want to Read (spec §50)
       const book = await repository.upsertBookByIsbn(recommendation.book);
       await repository.setBookStatus(book.id, "want");
+      void enrichBookMeta(book.id);
+      notifyLibraryChange();
       await repository.updateRecommendation(recommendation.id, { status: "want" });
       await reload();
     } catch (error) {
@@ -224,7 +228,7 @@ export default function DiscoverPage() {
 
   if (phase === "intro") {
     return (
-      <main className="flex flex-1 flex-col items-center justify-center px-8 pb-32 text-center">
+      <main className="flex flex-1 flex-col items-center justify-center px-8 pb-24 text-center">
         <p className="text-3xl">✦</p>
         <h1 className="mt-4 text-2xl font-bold tracking-tight">AI 취향 분석</h1>
         <p className="mt-3 text-[15px] leading-relaxed break-keep text-ink-secondary">
@@ -246,7 +250,7 @@ export default function DiscoverPage() {
   }
 
   return (
-    <main className="flex-1 px-5 pt-14 pb-36">
+    <main className="flex-1 px-5 pt-8 pb-20">
       <h1 className="text-2xl font-bold tracking-tight">Discover</h1>
 
       {aiError !== "" && (
@@ -258,7 +262,10 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      <div className="mt-5">
+      {/* 데스크톱: 좌측 프로필(고정) / 우측 추천 목록 2단 배치 */}
+      {/* Desktop: two columns — sticky profile left, recommendations right */}
+      <div className="lg:grid lg:grid-cols-[minmax(0,420px)_1fr] lg:items-start lg:gap-14">
+      <div className="mt-5 lg:sticky lg:top-16">
         {profile ? (
           <ProfileCard
             profile={profile}
@@ -283,8 +290,9 @@ export default function DiscoverPage() {
         )}
       </div>
 
+      <div>
       {profile && (
-        <section className="mt-8" aria-label="AI 추천">
+        <section className="mt-8 lg:mt-5" aria-label="AI 추천">
           <div className="flex items-baseline justify-between">
             <h2 className="text-xs font-semibold tracking-wide text-ink-tertiary uppercase">
               For You
@@ -317,7 +325,7 @@ export default function DiscoverPage() {
               </motion.button>
             </div>
           ) : (
-            <div className="mt-3 flex flex-col gap-3">
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
               {recommendations.map((recommendation) => (
                 <RecommendationCard
                   key={recommendation.id}
@@ -331,6 +339,8 @@ export default function DiscoverPage() {
           )}
         </section>
       )}
+      </div>
+      </div>
 
       <NotInterestedSheet
         open={notInterestedTarget !== null}

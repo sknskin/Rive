@@ -225,9 +225,14 @@ function ReadSheetContent({ onClose }: { onClose: () => void }) {
           )}
 
           {picks.length === 0 && wantPicks.length === 0 && loadError === "" && (
-            <p className="px-1 py-6 text-center text-sm text-ink-secondary">
-              읽고 있는 책이 없어요. 새로운 책을 찾아볼까요?
-            </p>
+            <div className="px-1 py-8 text-center">
+              <p className="text-[15px] font-semibold">지금 읽고 있는 책이 없네요</p>
+              <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
+                아래에서 새로운 책을 찾아
+                <br />
+                바로 시작해봐요
+              </p>
+            </div>
           )}
 
           <button
