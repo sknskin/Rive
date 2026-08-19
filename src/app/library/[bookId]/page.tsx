@@ -56,6 +56,10 @@ export default function BookDetailPage() {
   // Reading Plan — 완독 목표일 설정 (스펙 §82)
   // Reading plan — target finish date (spec §82)
   const [planSheetOpen, setPlanSheetOpen] = useState(false);
+  // 페이지 수 수동 입력 — 메타 보강 실패/전자책 대응 (리서치 C3, 전자책은 100 입력 시 % 기록)
+  // Manual page-count entry — covers failed enrichment and e-books (enter 100 to track by %)
+  const [pageCountSheetOpen, setPageCountSheetOpen] = useState(false);
+  const [pageCountText, setPageCountText] = useState("");
   const [planDateText, setPlanDateText] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -242,6 +246,28 @@ export default function BookDetailPage() {
     }
   }
 
+  async function handleSavePageCount() {
+    if (!book || busy) {
+      return;
+    }
+    const parsed = Number.parseInt(pageCountText, 10);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await getRepository().updateBookMeta(book.id, { pageCount: parsed });
+      notifyLibraryChange();
+      setPageCountSheetOpen(false);
+      setReloadKey((key) => key + 1);
+    } catch (error) {
+      console.error("[BookDetail] failed to save page count:", error);
+      setPageError("페이지 수를 저장하지 못했어요. 다시 시도해 주세요.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleRead() {
     if (!book || busy) {
       return;
@@ -311,6 +337,21 @@ export default function BookDetailPage() {
             </>
           )}
         </p>
+
+        {/* 페이지 수가 없으면 직접 입력 경로 제공 — 완독 플로우·진행률 활성화 (리서치 C3) */}
+        {/* Manual page-count entry when missing — unlocks finish flow and progress (C3) */}
+        {book.pageCount === 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              setPageCountText("");
+              setPageCountSheetOpen(true);
+            }}
+            className="mt-1 cursor-pointer text-sm font-medium text-tint active:opacity-70"
+          >
+            페이지 수 입력
+          </button>
+        )}
 
         {book.categories && book.categories.length > 0 && (
           <div className="mt-2 flex flex-wrap justify-center gap-1.5">
@@ -663,6 +704,37 @@ export default function BookDetailPage() {
               </button>
             )}
           </div>
+        </div>
+      </BottomSheet>
+
+      <BottomSheet
+        open={pageCountSheetOpen}
+        onClose={() => setPageCountSheetOpen(false)}
+        label="페이지 수 입력"
+      >
+        <div className="px-2 pt-2">
+          <h2 className="px-1 text-lg font-semibold tracking-tight">전체 페이지 수</h2>
+          <p className="mt-1 px-1 text-sm text-ink-secondary">
+            전자책이라면 100을 입력해 %로 기록할 수 있어요
+          </p>
+          <input
+            type="number"
+            inputMode="numeric"
+            min={1}
+            value={pageCountText}
+            aria-label="전체 페이지 수"
+            onChange={(event) => setPageCountText(event.target.value)}
+            placeholder="예: 320"
+            className="nums mt-4 w-full rounded-xl bg-fill px-3.5 py-3 text-[15px] outline-none placeholder:text-ink-tertiary focus:ring-2 focus:ring-tint"
+          />
+          <button
+            type="button"
+            disabled={busy || pageCountText.trim() === ""}
+            onClick={() => void handleSavePageCount()}
+            className="mt-5 w-full cursor-pointer rounded-2xl bg-accent py-3.5 text-[15px] font-semibold text-accent-ink disabled:opacity-40"
+          >
+            저장
+          </button>
         </div>
       </BottomSheet>
 
