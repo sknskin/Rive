@@ -7,6 +7,11 @@ import { THEME_INIT_SCRIPT } from "@/lib/theme";
 export const metadata: Metadata = {
   title: "Rive",
   description: "AI Personal Reading Calendar",
+  // PWA — 홈 화면 설치 지원 (리서치 C2)
+  // PWA — home-screen installability (research C2)
+  manifest: "/manifest.webmanifest",
+  icons: { apple: "/icons/apple-touch-icon.png" },
+  appleWebApp: { capable: true, title: "Rive", statusBarStyle: "black-translucent" },
 };
 
 export const viewport: Viewport = {
