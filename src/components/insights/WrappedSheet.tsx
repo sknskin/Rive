@@ -6,6 +6,7 @@ import BottomSheet from "@/components/BottomSheet";
 import type { AiErrorResponse } from "@/lib/ai/contracts";
 import { formatDurationShort } from "@/lib/format";
 import { getRepository } from "@/lib/repository";
+import { getAuthHeader } from "@/lib/supabase/client";
 import type { WrappedStats } from "@/lib/wrapped";
 
 // 리캡 시트 — 통계 카드 + AI 한 줄 요약(캐시) + 이미지 저장 (스펙 §58, §82 공유 이미지)
@@ -55,7 +56,7 @@ function WrappedContent({ stats }: { stats: WrappedStats }) {
     try {
       const response = await fetch("/api/ai/wrapped", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await getAuthHeader()) },
         body: JSON.stringify(stats),
       });
       const body = (await response.json()) as { summary: string } & AiErrorResponse;

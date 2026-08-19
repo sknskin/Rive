@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { motion } from "motion/react";
 import PageSkeleton from "@/components/PageSkeleton";
+import { getAuthHeader } from "@/lib/supabase/client";
 import MoodSheet from "@/components/discover/MoodSheet";
 import NotInterestedSheet from "@/components/discover/NotInterestedSheet";
 import OnboardingWizard from "@/components/discover/OnboardingWizard";
@@ -95,7 +96,7 @@ export default function DiscoverPage() {
     try {
       const response = await fetch("/api/ai/profile", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await getAuthHeader()) },
         body: JSON.stringify({
           preference: toPreferencePayload(currentPreference),
           behavior: await collectBehaviorSnapshot(),
@@ -144,7 +145,7 @@ export default function DiscoverPage() {
       try {
         const response = await fetch("/api/ai/recommend", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(await getAuthHeader()) },
           body: JSON.stringify({
             preference: toPreferencePayload(currentPreference),
             behavior: await collectBehaviorSnapshot(),

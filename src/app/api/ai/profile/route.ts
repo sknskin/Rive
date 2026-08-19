@@ -1,10 +1,15 @@
 import type { AiErrorResponse, ProfileRequest, ProfileResponse } from "@/lib/ai/contracts";
 import { generateJson } from "@/lib/ai/gemini";
 import { buildProfilePrompt, PROFILE_SCHEMA } from "@/lib/ai/prompts";
+import { getUserFromRequest } from "@/lib/supabase/serverAuth";
 
 const STATUS_BAD_REQUEST = 400;
+const STATUS_UNAUTHORIZED = 401;
 const STATUS_SERVICE_UNAVAILABLE = 503;
 const STATUS_BAD_GATEWAY = 502;
+// 비용 어뷰징 방지용 요청 본문 상한 (6차 조사 B1)
+// Request-body cap against cost abuse (audit 6 B1)
+const MAX_BODY_CHARS = 200_000;
 
 // AI 취향 분석 — 분석 요청 1회당 Gemini 1회 호출, 결과는 클라이언트가 캐시 (스펙 §65)
 // AI taste analysis — one Gemini call per request; the client caches the result (spec §65)
@@ -18,9 +23,26 @@ export async function POST(request: Request) {
     return Response.json(body, { status: STATUS_SERVICE_UNAVAILABLE });
   }
 
+  // 로그인 사용자만 AI 호출 가능 — Gemini 비용 어뷰징 차단 (6차 조사 B1)
+  // Only signed-in users may call the AI — blocks Gemini cost abuse (audit 6 B1)
+  const user = await getUserFromRequest(request);
+  if (!user) {
+    return Response.json(
+      { error: "AI 분석은 로그인 후 사용할 수 있어요. 설정에서 로그인해 주세요." } satisfies AiErrorResponse,
+      { status: STATUS_UNAUTHORIZED },
+    );
+  }
+
   let payload: ProfileRequest;
   try {
-    payload = (await request.json()) as ProfileRequest;
+    const raw = await request.text();
+    if (raw.length > MAX_BODY_CHARS) {
+      return Response.json(
+        { error: "요청이 너무 커요." } satisfies AiErrorResponse,
+        { status: STATUS_BAD_REQUEST },
+      );
+    }
+    payload = JSON.parse(raw) as ProfileRequest;
   } catch {
     return Response.json(
       { error: "잘못된 요청이에요." } satisfies AiErrorResponse,

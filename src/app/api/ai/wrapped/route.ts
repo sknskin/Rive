@@ -1,9 +1,15 @@
 import type { AiErrorResponse } from "@/lib/ai/contracts";
 import { generateJson, type GeminiSchema } from "@/lib/ai/gemini";
+import { getUserFromRequest } from "@/lib/supabase/serverAuth";
 
 const STATUS_BAD_REQUEST = 400;
+const STATUS_UNAUTHORIZED = 401;
 const STATUS_SERVICE_UNAVAILABLE = 503;
 const STATUS_BAD_GATEWAY = 502;
+// 프롬프트에 들어가는 문자열 상한 — 임의 JSON 주입 방지 (6차 조사 B1)
+// String cap for prompt inputs — blocks arbitrary JSON injection (audit 6 B1)
+const MAX_LABEL_CHARS = 40;
+const MAX_NAME_CHARS = 80;
 
 const SUMMARY_SCHEMA: GeminiSchema = {
   type: "OBJECT",
@@ -40,9 +46,33 @@ export async function POST(request: Request) {
     );
   }
 
+  // 로그인 사용자만 AI 호출 가능 (6차 조사 B1)
+  // Signed-in users only (audit 6 B1)
+  const user = await getUserFromRequest(request);
+  if (!user) {
+    return Response.json(
+      { error: "AI 요약은 로그인 후 사용할 수 있어요. 설정에서 로그인해 주세요." } satisfies AiErrorResponse,
+      { status: STATUS_UNAUTHORIZED },
+    );
+  }
+
   let stats: WrappedStatsPayload;
   try {
-    stats = (await request.json()) as WrappedStatsPayload;
+    const raw = (await request.json()) as Partial<WrappedStatsPayload>;
+    // 알려진 필드만 화이트리스트로 복사한다 — 임의 키가 프롬프트에 들어가지 않게 (6차 B1)
+    // Whitelist known fields so arbitrary keys never reach the prompt (audit 6 B1)
+    stats = {
+      label: String(raw.label ?? "").slice(0, MAX_LABEL_CHARS),
+      totalSeconds: Number(raw.totalSeconds) || 0,
+      totalPages: Number(raw.totalPages) || 0,
+      readingDays: Number(raw.readingDays) || 0,
+      finishedBooks: Number(raw.finishedBooks) || 0,
+      topAuthor: raw.topAuthor ? String(raw.topAuthor).slice(0, MAX_NAME_CHARS) : null,
+      topGenre: raw.topGenre ? String(raw.topGenre).slice(0, MAX_NAME_CHARS) : null,
+    };
+    if (stats.label === "") {
+      throw new Error("label required");
+    }
   } catch {
     return Response.json(
       { error: "잘못된 요청이에요." } satisfies AiErrorResponse,

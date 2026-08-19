@@ -15,7 +15,14 @@ import {
 import { searchGoogleBooks } from "@/lib/bookSearch/googleBooks";
 import { searchKakao } from "@/lib/bookSearch/kakao";
 import { RECOMMENDATION_COUNT } from "@/lib/constants";
+import { getUserFromRequest } from "@/lib/supabase/serverAuth";
 import type { BookSearchResult } from "@/lib/types";
+
+const STATUS_UNAUTHORIZED = 401;
+// 비용 어뷰징 방지 상한 — 본문 크기와 제외 목록 길이 (6차 조사 B1)
+// Abuse caps — request-body size and exclude-list length (audit 6 B1)
+const MAX_BODY_CHARS = 200_000;
+const MAX_EXCLUDE_TITLES = 300;
 
 const STATUS_BAD_REQUEST = 400;
 const STATUS_SERVICE_UNAVAILABLE = 503;
@@ -67,9 +74,26 @@ export async function POST(request: Request) {
     return Response.json(body, { status: STATUS_SERVICE_UNAVAILABLE });
   }
 
+  // 로그인 사용자만 AI 호출 가능 — 요청 1회 = Gemini 2회 + 검색 다회라 게이트가 필수 (6차 B1)
+  // Signed-in users only — one request costs two Gemini calls plus searches (audit 6 B1)
+  const user = await getUserFromRequest(request);
+  if (!user) {
+    return Response.json(
+      { error: "AI 추천은 로그인 후 사용할 수 있어요. 설정에서 로그인해 주세요." } satisfies AiErrorResponse,
+      { status: STATUS_UNAUTHORIZED },
+    );
+  }
+
   let payload: RecommendRequest;
   try {
-    payload = (await request.json()) as RecommendRequest;
+    const raw = await request.text();
+    if (raw.length > MAX_BODY_CHARS) {
+      return Response.json(
+        { error: "요청이 너무 커요." } satisfies AiErrorResponse,
+        { status: STATUS_BAD_REQUEST },
+      );
+    }
+    payload = JSON.parse(raw) as RecommendRequest;
   } catch {
     return Response.json(
       { error: "잘못된 요청이에요." } satisfies AiErrorResponse,
@@ -82,6 +106,12 @@ export async function POST(request: Request) {
       { error: "추천에 필요한 데이터가 없어요." } satisfies AiErrorResponse,
       { status: STATUS_BAD_REQUEST },
     );
+  }
+
+  // 제외 목록 길이 상한 — 프롬프트 크기 폭주 방지
+  // Cap the exclude list to keep the prompt bounded
+  if (payload.excludeTitles && payload.excludeTitles.length > MAX_EXCLUDE_TITLES) {
+    payload.excludeTitles = payload.excludeTitles.slice(0, MAX_EXCLUDE_TITLES);
   }
 
   try {
