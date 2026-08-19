@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion } from "motion/react";
+import PageSkeleton from "@/components/PageSkeleton";
 import BookCover from "@/components/BookCover";
 import BottomSheet from "@/components/BottomSheet";
 import NotesQuotes from "@/components/library/NotesQuotes";
@@ -10,7 +11,7 @@ import RatingStars from "@/components/library/RatingStars";
 import StatusSheet from "@/components/library/StatusSheet";
 import ManualSessionSheet from "@/components/read/ManualSessionSheet";
 import { recomputeBookProgress } from "@/lib/bookProgress";
-import { DEFAULT_START_PAGE, STATUS_LABELS } from "@/lib/constants";
+import { DEFAULT_START_PAGE, EXTRA_RATING_ITEMS, STATUS_LABELS } from "@/lib/constants";
 import { enrichBookMeta } from "@/lib/enrichBook";
 import { notifyLibraryChange } from "@/lib/libraryEvents";
 import {
@@ -49,6 +50,9 @@ export default function BookDetailPage() {
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [removeSheetOpen, setRemoveSheetOpen] = useState(false);
   const [removeArmed, setRemoveArmed] = useState(false);
+  // 저장 진행 중 가드 — 조작 연타로 인한 중복 실행 방지 (6차 조사 D1)
+  // In-flight guard — prevents duplicate mutations from rapid taps (audit 6 D1)
+  const [busy, setBusy] = useState(false);
   // Reading Plan — 완독 목표일 설정 (스펙 §82)
   // Reading plan — target finish date (spec §82)
   const [planSheetOpen, setPlanSheetOpen] = useState(false);
@@ -74,8 +78,12 @@ export default function BookDetailPage() {
             setReloadKey((key) => key + 1);
           }
         });
-        const loadedUserBook = await repository.getUserBook(params.bookId);
-        const loadedSessions = await repository.listSessionsForBook(params.bookId);
+        // 서로 독립적인 조회는 병렬로 실행한다 (6차 조사 D4)
+        // Run independent reads in parallel (audit 6 D4)
+        const [loadedUserBook, loadedSessions] = await Promise.all([
+          repository.getUserBook(params.bookId),
+          repository.listSessionsForBook(params.bookId),
+        ]);
         if (!cancelled) {
           setBook(loadedBook);
           setUserBook(loadedUserBook ?? null);
@@ -111,10 +119,13 @@ export default function BookDetailPage() {
     };
   }, [params.bookId, router, reloadKey]);
 
+  // busy 가드 — 저장이 끝나기 전 같은 조작이 중복 실행되는 것을 막는다 (6차 조사 D1)
+  // busy guard — blocks duplicate mutations while one is still in flight (audit 6 D1)
   async function handleStatusChange(status: BookStatus, dnfReason?: string) {
-    if (!book) {
+    if (!book || busy) {
       return;
     }
+    setBusy(true);
     const repository = getRepository();
     try {
       await repository.setBookStatus(book.id, status);
@@ -127,13 +138,16 @@ export default function BookDetailPage() {
     } catch (error) {
       console.error("[BookDetail] failed to change status:", error);
       setPageError("상태를 변경하지 못했어요. 다시 시도해 주세요.");
+    } finally {
+      setBusy(false);
     }
   }
 
   async function handleRatingChange(rating: number) {
-    if (!book) {
+    if (!book || busy) {
       return;
     }
+    setBusy(true);
     try {
       await getRepository().updateUserBook(book.id, { rating });
       notifyLibraryChange();
@@ -141,13 +155,16 @@ export default function BookDetailPage() {
     } catch (error) {
       console.error("[BookDetail] failed to save rating:", error);
       setPageError("별점을 저장하지 못했어요. 다시 시도해 주세요.");
+    } finally {
+      setBusy(false);
     }
   }
 
   async function handleToggleUpNext() {
-    if (!book || !userBook) {
+    if (!book || !userBook || busy) {
       return;
     }
+    setBusy(true);
     try {
       await getRepository().updateUserBook(book.id, {
         upNextAt: userBook.upNextAt === undefined ? Date.now() : undefined,
@@ -157,13 +174,16 @@ export default function BookDetailPage() {
     } catch (error) {
       console.error("[BookDetail] failed to toggle up-next:", error);
       setPageError("Up Next 설정에 실패했어요. 다시 시도해 주세요.");
+    } finally {
+      setBusy(false);
     }
   }
 
   async function handleSaveTargetDate(clear: boolean) {
-    if (!book) {
+    if (!book || busy) {
       return;
     }
+    setBusy(true);
     try {
       const targetDate = clear ? undefined : new Date(`${planDateText}T23:59`).getTime();
       if (!clear && !Number.isFinite(targetDate)) {
@@ -175,10 +195,16 @@ export default function BookDetailPage() {
     } catch (error) {
       console.error("[BookDetail] failed to save target date:", error);
       setPageError("목표일을 저장하지 못했어요. 다시 시도해 주세요.");
+    } finally {
+      setBusy(false);
     }
   }
 
   async function handleDeleteSession(session: ReadingSession) {
+    if (busy) {
+      return;
+    }
+    setBusy(true);
     try {
       const repository = getRepository();
       await repository.deleteSession(session.id);
@@ -193,13 +219,16 @@ export default function BookDetailPage() {
       console.error("[BookDetail] failed to delete session:", error);
       setPageError("기록을 삭제하지 못했어요. 다시 시도해 주세요.");
       setSessionAction(null);
+    } finally {
+      setBusy(false);
     }
   }
 
   async function handleRemoveBook() {
-    if (!book) {
+    if (!book || busy) {
       return;
     }
+    setBusy(true);
     try {
       await getRepository().removeBookCompletely(book.id);
       notifyLibraryChange();
@@ -208,24 +237,29 @@ export default function BookDetailPage() {
       console.error("[BookDetail] failed to remove book:", error);
       setPageError("책을 제거하지 못했어요. 다시 시도해 주세요.");
       setRemoveSheetOpen(false);
+    } finally {
+      setBusy(false);
     }
   }
 
   async function handleRead() {
-    if (!book) {
+    if (!book || busy) {
       return;
     }
+    setBusy(true);
     try {
       const nextPage = Math.max(userBook?.currentPage ?? 0, DEFAULT_START_PAGE);
       await startExistingBook(book.id, nextPage);
     } catch (error) {
       console.error("[BookDetail] failed to start reading:", error);
       setPageError("독서를 시작하지 못했어요. 다시 시도해 주세요.");
+    } finally {
+      setBusy(false);
     }
   }
 
   if (!ready || !book) {
-    return <main className="flex-1" />;
+    return <PageSkeleton />;
   }
 
   const totalSeconds = sessions.reduce((sum, session) => sum + session.durationSeconds, 0);
@@ -240,7 +274,7 @@ export default function BookDetailPage() {
         type="button"
         aria-label="뒤로"
         onClick={() => router.back()}
-        className="-ml-2 flex size-9 items-center justify-center rounded-full text-xl text-tint active:bg-fill"
+        className="-ml-2 flex size-9 cursor-pointer items-center justify-center rounded-full text-xl text-tint active:bg-fill"
       >
         ‹
       </button>
@@ -295,7 +329,7 @@ export default function BookDetailPage() {
           <button
             type="button"
             onClick={() => setStatusSheetOpen(true)}
-            className="mt-4 rounded-full bg-fill px-4 py-1.5 text-[13px] font-semibold text-ink-secondary active:opacity-70"
+            className="mt-4 cursor-pointer rounded-full bg-fill px-4 py-1.5 text-[13px] font-semibold text-ink-secondary active:opacity-70"
           >
             {STATUS_LABELS[userBook.status]}
             {userBook.status === "dnf" && userBook.dnfReason && ` · ${userBook.dnfReason}`}
@@ -364,7 +398,7 @@ export default function BookDetailPage() {
           type="button"
           whileTap={{ scale: 0.97 }}
           onClick={() => void handleRead()}
-          className="mt-6 w-full rounded-2xl bg-accent py-4 text-lg font-semibold tracking-wide text-accent-ink"
+          className="mt-6 w-full cursor-pointer rounded-2xl bg-accent py-4 text-lg font-semibold tracking-wide text-accent-ink shadow-sm transition-opacity hover:opacity-90"
         >
           READ
         </motion.button>
@@ -418,13 +452,16 @@ export default function BookDetailPage() {
           <button
             type="button"
             onClick={() => setManualSheetOpen(true)}
-            className="text-sm font-medium text-tint active:opacity-70"
+            className="cursor-pointer text-sm font-medium text-tint active:opacity-70"
           >
             + 기록 추가
           </button>
         </div>
 
-        {sessions.length === 0 ? (
+        {/* 세션이 없어도 완독 처리된 책이면 완독 행을 보여줘야 한다 (5차 조사 M6) */}
+        {/* Even without sessions, finished books must still show their finish row (audit 5 M6) */}
+        {sessions.length === 0 &&
+        !(userBook?.status === "read" && userBook.finishedAt !== null) ? (
           <div className="py-10 text-center">
             <p className="text-[15px] font-medium text-ink-secondary">
               아직 이 책의 기록이 없어요
@@ -487,6 +524,12 @@ export default function BookDetailPage() {
                     {"★".repeat(userBook.rating)}
                   </span>
                 )}
+                {userBook.extraRatings &&
+                  formatExtraRatingsLabel(userBook.extraRatings) !== "" && (
+                    <span className="nums ml-2 text-ink-tertiary">
+                      {formatExtraRatingsLabel(userBook.extraRatings)}
+                    </span>
+                  )}
               </li>
             )}
           </ul>
@@ -533,7 +576,11 @@ export default function BookDetailPage() {
         editSession={editTarget ?? undefined}
       />
 
-      <BottomSheet open={sessionAction !== null} onClose={() => setSessionAction(null)}>
+      <BottomSheet
+        open={sessionAction !== null}
+        onClose={() => setSessionAction(null)}
+        label="기록 관리"
+      >
         {sessionAction && (
           <div className="px-2">
             <h2 className="px-1 pt-2 text-lg font-semibold tracking-tight">
@@ -583,7 +630,11 @@ export default function BookDetailPage() {
         )}
       </BottomSheet>
 
-      <BottomSheet open={planSheetOpen} onClose={() => setPlanSheetOpen(false)}>
+      <BottomSheet
+        open={planSheetOpen}
+        onClose={() => setPlanSheetOpen(false)}
+        label="완독 목표일"
+      >
         <div className="px-2 pt-2">
           <h2 className="px-1 text-lg font-semibold tracking-tight">언제까지 완독할까요?</h2>
           <input
@@ -615,7 +666,11 @@ export default function BookDetailPage() {
         </div>
       </BottomSheet>
 
-      <BottomSheet open={removeSheetOpen} onClose={() => setRemoveSheetOpen(false)}>
+      <BottomSheet
+        open={removeSheetOpen}
+        onClose={() => setRemoveSheetOpen(false)}
+        label="서재에서 제거"
+      >
         <div className="px-2 pt-2 text-center">
           <h2 className="text-lg font-semibold tracking-tight">
             이 책을 서재에서 제거할까요?
@@ -628,6 +683,7 @@ export default function BookDetailPage() {
           <div className="mt-6 flex flex-col gap-2.5">
             <button
               type="button"
+              disabled={busy}
               onClick={() => {
                 if (removeArmed) {
                   void handleRemoveBook();
@@ -635,7 +691,7 @@ export default function BookDetailPage() {
                   setRemoveArmed(true);
                 }
               }}
-              className={`w-full cursor-pointer rounded-2xl py-3.5 text-[15px] font-semibold transition-colors duration-150 ${
+              className={`w-full cursor-pointer rounded-2xl py-3.5 text-[15px] font-semibold transition-colors duration-150 disabled:opacity-40 ${
                 removeArmed ? "bg-danger text-white" : "bg-fill text-danger"
               }`}
             >
@@ -696,4 +752,14 @@ function PlanLine({
       <span className="ml-1 text-tint">수정</span>
     </button>
   );
+}
+
+// 완독 추가 평가를 "재미 4 · 몰입도 5" 형태의 한 줄 라벨로 만든다 (스펙 §25)
+// Build a one-line label like "재미 4 · 몰입도 5" from extra finish ratings (spec §25)
+function formatExtraRatingsLabel(
+  extraRatings: NonNullable<UserBook["extraRatings"]>,
+): string {
+  return EXTRA_RATING_ITEMS.filter((item) => (extraRatings[item.key] ?? 0) > 0)
+    .map((item) => `${item.label} ${extraRatings[item.key]}`)
+    .join(" · ");
 }
