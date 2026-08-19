@@ -25,6 +25,7 @@ export function mapGoogleVolume(volume: GoogleVolume): BookSearchResult {
     pageCount: info.pageCount ?? 0,
     kakaoUrl: "",
     googleBooksId: volume.id,
+    description: info.description ?? "",
   };
 }
 
@@ -32,6 +33,13 @@ export async function searchGoogleBooks(query: string): Promise<BookSearchResult
   const url = new URL(GOOGLE_BOOKS_API_URL);
   url.searchParams.set("q", query);
   url.searchParams.set("maxResults", String(SEARCH_RESULT_SIZE));
+
+  // 키가 있으면 프로젝트 쿼터를 사용해 키리스 IP 제한(429)을 피한다
+  // With a key, project quota applies and avoids keyless IP throttling (429)
+  const apiKey = process.env.GOOGLE_BOOKS_API_KEY;
+  if (apiKey) {
+    url.searchParams.set("key", apiKey);
+  }
 
   const response = await fetch(url);
 

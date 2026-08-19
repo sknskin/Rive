@@ -25,6 +25,8 @@ export interface GoogleVolumeInfo {
   authors?: string[];
   publisher?: string;
   pageCount?: number;
+  description?: string;
+  categories?: string[];
   industryIdentifiers?: GoogleVolumeIdentifier[];
   imageLinks?: {
     thumbnail?: string;

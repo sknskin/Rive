@@ -25,6 +25,7 @@ export function mapKakaoDocument(doc: KakaoBookDocument): BookSearchResult {
     pageCount: 0,
     kakaoUrl: doc.url ?? "",
     googleBooksId: "",
+    description: doc.contents ?? "",
   };
 }
 

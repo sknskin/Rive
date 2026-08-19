@@ -14,6 +14,11 @@ export interface Book {
   kakaoUrl: string;
   googleBooksId: string;
   createdAt: number;
+  // 메타 보강 필드 — Kakao 응답에 없는 정보를 Google Books에서 병합 (스펙 §22, §33, §72)
+  // Enrichment fields — merged from Google Books where Kakao lacks data (spec §22, §33, §72)
+  description?: string;
+  categories?: string[];
+  enrichedAt?: number;
 }
 
 export interface UserBook {
@@ -61,6 +66,7 @@ export interface BookSearchResult {
   pageCount: number;
   kakaoUrl: string;
   googleBooksId: string;
+  description?: string;
 }
 
 export interface BookSearchResponse {
