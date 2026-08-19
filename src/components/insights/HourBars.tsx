@@ -15,6 +15,17 @@ interface HourBarsProps {
 // Time-of-day chart — single series with the peak window emphasized (spec §31)
 export default function HourBars({ histogram, peak }: HourBarsProps) {
   const max = Math.max(...histogram, 1);
+  const hasData = histogram.some((seconds) => seconds > 0);
+
+  // 전부 0이면 더미 막대 대신 빈 상태 문구를 보여준다 (5차 조사 L6)
+  // All-zero data shows an empty-state message instead of dummy bars (audit 5 L6)
+  if (!hasData) {
+    return (
+      <p className="py-6 text-center text-sm text-ink-tertiary">
+        아직 시간대 데이터가 없어요
+      </p>
+    );
+  }
 
   function isInPeak(hour: number): boolean {
     if (!peak) {
@@ -29,7 +40,12 @@ export default function HourBars({ histogram, peak }: HourBarsProps) {
   }
 
   return (
-    <div>
+    <div
+      role="img"
+      aria-label={`시간대별 독서 분포${
+        peak ? `, 집중 시간대 ${peak.startHour}시부터 ${peak.endHour}시까지` : ""
+      }`}
+    >
       <div className="flex h-20 items-end gap-[3px]">
         {histogram.map((seconds, hour) => {
           const heightPercent = (seconds / max) * 100;

@@ -35,7 +35,14 @@ export default function CurrentlyReading({ book, userBook }: CurrentlyReadingPro
             </p>
           )}
           {hasProgress && (
-            <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-fill">
+            <div
+              role="progressbar"
+              aria-label="독서 진행률"
+              aria-valuenow={progressPercent}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              className="mt-2 h-1 w-full overflow-hidden rounded-full bg-fill"
+            >
               <div
                 className="h-full rounded-full bg-ink transition-[width] duration-500"
                 style={{ width: `${progressPercent}%` }}

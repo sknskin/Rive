@@ -50,7 +50,13 @@ export default function YearHeatmap({ totalsByDay, nowMs }: YearHeatmapProps) {
   }
 
   return (
-    <div ref={scrollerRef} className="-mx-5 overflow-x-auto px-5">
+    <div
+      ref={scrollerRef}
+      tabIndex={0}
+      role="region"
+      aria-label="최근 1년 독서 히트맵, 좌우로 스크롤할 수 있어요"
+      className="-mx-5 overflow-x-auto px-5"
+    >
       <div className="inline-flex flex-col gap-1.5">
         <div className="flex gap-[3px]">
           {weeks.map((column, weekIndex) => (

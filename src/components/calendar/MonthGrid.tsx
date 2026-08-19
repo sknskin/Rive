@@ -68,6 +68,7 @@ export default function MonthGrid({
             <button
               key={day}
               type="button"
+              aria-pressed={isSelected}
               onClick={() => onSelectDay(day)}
               className={`flex min-h-16 cursor-pointer flex-col items-center gap-0.5 rounded-xl pt-1 pb-1.5 transition-colors duration-150 md:min-h-20 md:hover:bg-fill/60 ${
                 isSelected ? "bg-fill" : ""

@@ -23,7 +23,7 @@ export default function RatingStars({ rating, onChange }: RatingStarsProps) {
             aria-checked={value === rating}
             aria-label={`${value}점`}
             onClick={() => onChange(value)}
-            className={`text-2xl transition-transform duration-100 active:scale-110 ${
+            className={`cursor-pointer text-2xl transition-transform duration-100 active:scale-110 ${
               filled ? "text-tint" : "text-ink-tertiary/50"
             }`}
           >

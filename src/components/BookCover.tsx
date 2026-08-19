@@ -47,7 +47,11 @@ export default function BookCover({ title, coverUrl, size = "md" }: BookCoverPro
           src={coverUrl}
           alt={`${title} 표지`}
           fill
-          sizes={`${SIZE_PIXELS[size]}px`}
+          // fluid는 그리드 폭을 따르므로 뷰포트 기반 힌트를 준다 (모바일 3열 ≈ 33vw)
+          // Fluid follows its grid cell, so hint by viewport (3-col mobile ≈ 33vw)
+          sizes={
+            size === "fluid" ? "(min-width: 1024px) 160px, 33vw" : `${SIZE_PIXELS[size]}px`
+          }
           className="object-cover"
         />
       ) : (

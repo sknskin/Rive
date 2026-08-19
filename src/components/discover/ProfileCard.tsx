@@ -23,7 +23,7 @@ export default function ProfileCard({ profile, analyzing, onReanalyze }: Profile
           type="button"
           onClick={onReanalyze}
           disabled={analyzing}
-          className="shrink-0 text-[13px] font-medium text-tint active:opacity-70 disabled:opacity-40"
+          className="shrink-0 cursor-pointer text-[13px] font-medium text-tint active:opacity-70 disabled:opacity-40"
         >
           {analyzing ? "분석 중…" : "다시 분석"}
         </button>
@@ -41,7 +41,14 @@ export default function ProfileCard({ profile, analyzing, onReanalyze }: Profile
           {profile.genres.map((genre) => (
             <div key={genre.name} className="flex items-center gap-3">
               <span className="w-16 shrink-0 text-[13px] font-medium">{genre.name}</span>
-              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-fill">
+              <div
+                role="progressbar"
+                aria-label={`${genre.name} 선호도`}
+                aria-valuenow={Math.min(100, Math.max(0, genre.score))}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                className="h-1.5 flex-1 overflow-hidden rounded-full bg-fill"
+              >
                 <div
                   className="h-full rounded-full bg-tint transition-[width] duration-500"
                   style={{ width: `${Math.min(100, Math.max(0, genre.score))}%` }}
@@ -133,7 +140,7 @@ export default function ProfileCard({ profile, analyzing, onReanalyze }: Profile
           <button
             type="button"
             onClick={() => setShowEvidence((visible) => !visible)}
-            className="text-sm font-medium text-tint active:opacity-70"
+            className="cursor-pointer text-sm font-medium text-tint active:opacity-70"
           >
             왜 이런 분석이 나왔나요? {showEvidence ? "▴" : "▾"}
           </button>

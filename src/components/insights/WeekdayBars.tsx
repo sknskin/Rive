@@ -15,8 +15,22 @@ export default function WeekdayBars({ histogram }: WeekdayBarsProps) {
   const topIndex = histogram.indexOf(Math.max(...histogram));
   const hasData = histogram.some((seconds) => seconds > 0);
 
+  // 전부 0이면 더미 막대 대신 빈 상태 문구를 보여준다 (5차 조사 L6)
+  // All-zero data shows an empty-state message instead of dummy bars (audit 5 L6)
+  if (!hasData) {
+    return (
+      <p className="py-6 text-center text-sm text-ink-tertiary">
+        아직 요일 데이터가 없어요
+      </p>
+    );
+  }
+
   return (
-    <div className="flex h-28 items-end gap-2.5">
+    <div
+      role="img"
+      aria-label={`요일별 독서 분포, 가장 많이 읽은 요일은 ${WEEKDAY_LABELS[topIndex]}요일`}
+      className="flex h-28 items-end gap-2.5"
+    >
       {histogram.map((seconds, weekday) => {
         const heightPercent = (seconds / max) * 100;
         const isTop = hasData && weekday === topIndex;

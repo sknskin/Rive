@@ -74,6 +74,7 @@ export default function BookSearch({ onSelect }: BookSearchProps) {
     <div className="px-2">
       <input
         type="search"
+        aria-label="책 제목이나 저자 검색"
         autoFocus
         value={query}
         onChange={(event) => handleQueryChange(event.target.value)}
@@ -98,7 +99,7 @@ export default function BookSearch({ onSelect }: BookSearchProps) {
               <button
                 type="button"
                 onClick={() => onSelect(result)}
-                className="flex w-full items-center gap-3.5 py-3 text-left active:opacity-60"
+                className="flex w-full cursor-pointer items-center gap-3.5 py-3 text-left active:opacity-60"
               >
                 <BookCover title={result.title} coverUrl={result.coverUrl} size="sm" />
                 <div className="min-w-0 flex-1">

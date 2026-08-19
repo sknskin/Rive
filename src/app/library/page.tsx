@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
+import PageSkeleton from "@/components/PageSkeleton";
 import { useSearchParams } from "next/navigation";
 import BookCover from "@/components/BookCover";
 import { STATUS_LABELS, STATUS_ORDER } from "@/lib/constants";
@@ -20,7 +21,7 @@ interface LibraryItem {
 // Pages using useSearchParams need a Suspense boundary (Next requirement)
 export default function LibraryPage() {
   return (
-    <Suspense fallback={<main className="flex-1" />}>
+    <Suspense fallback={<PageSkeleton />}>
       <LibraryContent />
     </Suspense>
   );
@@ -86,9 +87,14 @@ function LibraryContent() {
       const repository = getRepository();
       try {
         const userBooks = await repository.listUserBooksByStatus(status);
+        // 책마다 개별 조회하지 않고 배치로 가져온다 — N+1 방지 (6차 조사 D3)
+        // Batch-load books instead of per-book lookups — avoids N+1 (audit 6 D3)
+        const booksById = await repository.listBooksByIds(
+          userBooks.map((userBook) => userBook.bookId),
+        );
         const loaded: LibraryItem[] = [];
         for (const userBook of userBooks) {
-          const book = await repository.getBook(userBook.bookId);
+          const book = booksById.get(userBook.bookId);
           if (book) {
             loaded.push({ book, userBook });
           }
@@ -145,8 +151,9 @@ function LibraryContent() {
             <button
               key={candidate}
               type="button"
+              aria-pressed={active}
               onClick={() => setStatus(candidate)}
-              className={`shrink-0 rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors duration-150 ${
+              className={`shrink-0 cursor-pointer rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors duration-150 ${
                 active ? "bg-accent text-accent-ink" : "bg-fill text-ink-secondary"
               }`}
             >
@@ -203,7 +210,7 @@ function LibraryContent() {
             <li key={book.id}>
               <Link
                 href={`/library/${book.id}`}
-                className="flex items-center gap-3.5 py-3 active:opacity-70"
+                className="flex cursor-pointer items-center gap-3.5 py-3 active:opacity-70"
               >
                 <BookCover title={book.title} coverUrl={book.coverUrl} size="sm" />
                 <div className="min-w-0 flex-1">
