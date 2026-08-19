@@ -251,7 +251,7 @@ export default function TabBar() {
               </ul>
 
               <div className="mt-auto flex items-center justify-between border-t border-separator px-1 pt-3">
-                <span className="px-2 text-sm font-medium text-ink-tertiary">화면 모드</span>
+                <span className="px-2 text-sm font-medium text-ink-tertiary">설정</span>
                 <ThemeButton onClick={openThemeSheet} />
               </div>
             </motion.aside>

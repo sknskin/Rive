@@ -7,7 +7,7 @@ import BottomSheet from "@/components/BottomSheet";
 import RatingStars from "@/components/library/RatingStars";
 import EndPageSheet from "@/components/read/EndPageSheet";
 import Stopwatch from "@/components/read/Stopwatch";
-import { MIN_SESSION_SECONDS } from "@/lib/constants";
+import { EXTRA_RATING_ITEMS, MIN_SESSION_SECONDS } from "@/lib/constants";
 import { hapticSuccess, hapticTap } from "@/lib/haptics";
 import { getRepository } from "@/lib/repository";
 import type { ActiveSession, Book } from "@/lib/types";
@@ -28,6 +28,10 @@ export default function ReadPage() {
   // 완독 직후 별점을 바로 받는다 — AI 취향 분석의 핵심 입력 (스펙 §25, BACKLOG P0-C)
   // Prompt for a rating right after finishing — key input for AI analysis (spec §25)
   const [ratingBookId, setRatingBookId] = useState<string | null>(null);
+  // 별점 후 선택적 추가 평가 단계 (스펙 §25 — 한꺼번에 강제하지 않는다)
+  // Optional extra-evaluation step after the star rating (spec §25)
+  const [extraStep, setExtraStep] = useState(false);
+  const [extraRatings, setExtraRatings] = useState<Record<string, number>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -146,11 +150,26 @@ export default function ReadPage() {
     }
     try {
       await getRepository().updateUserBook(ratingBookId, { rating });
-      router.replace("/");
+      setExtraStep(true);
     } catch (error) {
       console.error("[ReadPage] failed to save rating:", error);
       // 별점 저장이 실패해도 완독 처리는 끝났으므로 홈으로 보낸다
       // Finishing already succeeded, so return home even if the rating fails
+      router.replace("/");
+    }
+  }
+
+  async function handleExtraDone() {
+    if (!ratingBookId) {
+      return;
+    }
+    try {
+      if (Object.keys(extraRatings).length > 0) {
+        await getRepository().updateUserBook(ratingBookId, { extraRatings });
+      }
+      router.replace("/");
+    } catch (error) {
+      console.error("[ReadPage] failed to save extra ratings:", error);
       router.replace("/");
     }
   }
@@ -201,24 +220,64 @@ export default function ReadPage() {
       />
 
       <BottomSheet open={ratingBookId !== null} onClose={() => router.replace("/")}>
-        <div className="px-2 pt-2 text-center">
-          <h2 className="text-lg font-semibold tracking-tight">한 권을 다 읽었어요, 축하해요</h2>
-          <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
-            이 책, 어땠나요?
-            <br />
-            별점은 취향 분석에 큰 도움이 돼요
-          </p>
-          <div className="mt-5">
-            <RatingStars rating={0} onChange={(rating) => void handleRatingSave(rating)} />
+        {!extraStep ? (
+          <div className="px-2 pt-2 text-center">
+            <h2 className="text-lg font-semibold tracking-tight">한 권을 다 읽었어요, 축하해요</h2>
+            <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
+              이 책, 어땠나요?
+              <br />
+              별점은 취향 분석에 큰 도움이 돼요
+            </p>
+            <div className="mt-5">
+              <RatingStars rating={0} onChange={(rating) => void handleRatingSave(rating)} />
+            </div>
+            <button
+              type="button"
+              onClick={() => router.replace("/")}
+              className="mt-6 w-full cursor-pointer py-2 text-sm font-medium text-ink-tertiary"
+            >
+              나중에 할게요
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => router.replace("/")}
-            className="mt-6 w-full cursor-pointer py-2 text-sm font-medium text-ink-tertiary"
-          >
-            나중에 할게요
-          </button>
-        </div>
+        ) : (
+          <div className="px-2 pt-2 text-center">
+            <h2 className="text-lg font-semibold tracking-tight">조금만 더 알려줄래요?</h2>
+            <p className="mt-2 text-sm text-ink-secondary">전부 선택이에요, 편하게 넘겨도 돼요</p>
+            <div className="mt-5 flex flex-col gap-4">
+              {EXTRA_RATING_ITEMS.map((item) => (
+                <div key={item.key} className="flex items-center justify-between">
+                  <span className="text-[15px] font-medium">{item.label}</span>
+                  <div className="flex gap-1.5">
+                    {[1, 2, 3, 4, 5].map((value) => (
+                      <button
+                        key={value}
+                        type="button"
+                        aria-label={`${item.label} ${value}점`}
+                        onClick={() =>
+                          setExtraRatings((previous) => ({ ...previous, [item.key]: value }))
+                        }
+                        className={`nums size-8 cursor-pointer rounded-full text-[13px] font-semibold transition-colors duration-150 ${
+                          (extraRatings[item.key] ?? 0) >= value
+                            ? "bg-accent text-accent-ink"
+                            : "bg-fill text-ink-tertiary"
+                        }`}
+                      >
+                        {value}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleExtraDone()}
+              className="mt-7 w-full cursor-pointer rounded-2xl bg-accent py-3.5 text-[15px] font-semibold text-accent-ink"
+            >
+              완료
+            </button>
+          </div>
+        )}
       </BottomSheet>
 
       <BottomSheet open={shortWarnOpen} onClose={() => setShortWarnOpen(false)}>
