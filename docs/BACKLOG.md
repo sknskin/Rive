@@ -496,5 +496,25 @@ Up Next, 예상 완독일, 무드 추천, 계정 동기화. **AI 취향 분석+�
 - 외부 콘솔 필요: Kakao OAuth(카카오 개발자 콘솔 앱 등록).
 - 대형/설계 필요: 북클럽·버디 리드(Fable형 소셜), Advanced Insights(스펙 원문 부재),
   books 공유 카탈로그.
-- 미세: 이관 완전 원자화(RPC), 미사용 export, RLS (select auth.uid()) 패턴, 바코드
-  실기기(카메라) 실측.
+- 미세 잔여: 바코드 실기기(카메라) 실측만 남음.
+
+---
+
+## 품질 부채 일괄 처리 (2026-08-19, 마이그레이션 v4 적용·실측 검증)
+
+- **이관/가져오기 완전 원자화 (7차 D4 완결)**: plpgsql RPC `import_user_data`(security
+  invoker — RLS 그대로 적용) 신설, 10개 테이블 upsert를 단일 트랜잭션으로. 클라이언트
+  업로더는 id 재매핑·검증 후 RPC 1회 호출로 축소. 실측: 서버 모드 재가져오기 26건 멱등
+  성공, 실패 시 전체 롤백 보장.
+- **RLS 정책 InitPlan 패턴**: 11개 정책 전부 `(select auth.uid())`로 재작성(psql로
+  pg_policy 확인), anon 차단 재실측.
+- **로컬 가져오기 행 검증**: 객체 아닌 행 필터(손상 파일 방어).
+- **미사용 export 6건 정리**(AiGenreScore·THEME_STORAGE_KEY·THEME_CHANGE_EVENT·
+  RiveDatabase·GoogleVolume 2종 — 전부 자기 파일 전용 확인 후 export 제거).
+  ImportResult·AuthedRequestUser·SessionWithBook 3건은 공개 함수 시그니처의 일부라
+  export 유지가 올바름 — 종결.
+- 마이그레이션 파일: supabase/migrations/20260819020000_atomic_import.sql.
+
+**이 시점의 잔여 = Vercel 배포(사용자 로그인 필요) + 배포 결합 3건(리마인더·쿼터 환불·
+WAF) + 외부 콘솔(Kakao OAuth) + 대형(북클럽·Advanced Insights·공유 카탈로그) +
+바코드 실기기 확인.**
