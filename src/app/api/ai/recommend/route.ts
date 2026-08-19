@@ -15,10 +15,11 @@ import {
 import { searchGoogleBooks } from "@/lib/bookSearch/googleBooks";
 import { searchKakao } from "@/lib/bookSearch/kakao";
 import { RECOMMENDATION_COUNT } from "@/lib/constants";
-import { getUserFromRequest } from "@/lib/supabase/serverAuth";
+import { consumeDailyAiQuota, getUserFromRequest } from "@/lib/supabase/serverAuth";
 import type { BookSearchResult } from "@/lib/types";
 
 const STATUS_UNAUTHORIZED = 401;
+const STATUS_TOO_MANY_REQUESTS = 429;
 // 비용 어뷰징 방지 상한 — 본문 크기와 제외 목록 길이 (6차 조사 B1)
 // Abuse caps — request-body size and exclude-list length (audit 6 B1)
 const MAX_BODY_CHARS = 200_000;
@@ -76,11 +77,20 @@ export async function POST(request: Request) {
 
   // 로그인 사용자만 AI 호출 가능 — 요청 1회 = Gemini 2회 + 검색 다회라 게이트가 필수 (6차 B1)
   // Signed-in users only — one request costs two Gemini calls plus searches (audit 6 B1)
-  const user = await getUserFromRequest(request);
-  if (!user) {
+  const authed = await getUserFromRequest(request);
+  if (!authed) {
     return Response.json(
       { error: "AI 추천은 로그인 후 사용할 수 있어요. 설정에서 로그인해 주세요." } satisfies AiErrorResponse,
       { status: STATUS_UNAUTHORIZED },
+    );
+  }
+
+  // 일일 사용량 상한 — 초과 시 429 (rate limit 1차)
+  // Daily usage cap — 429 when exceeded (first-stage rate limit)
+  if (!(await consumeDailyAiQuota(authed.token))) {
+    return Response.json(
+      { error: "오늘의 AI 사용량을 모두 썼어요. 내일 다시 이용해 주세요." } satisfies AiErrorResponse,
+      { status: STATUS_TOO_MANY_REQUESTS },
     );
   }
 

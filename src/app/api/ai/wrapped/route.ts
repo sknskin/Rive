@@ -1,9 +1,10 @@
 import type { AiErrorResponse } from "@/lib/ai/contracts";
 import { generateJson, type GeminiSchema } from "@/lib/ai/gemini";
-import { getUserFromRequest } from "@/lib/supabase/serverAuth";
+import { consumeDailyAiQuota, getUserFromRequest } from "@/lib/supabase/serverAuth";
 
 const STATUS_BAD_REQUEST = 400;
 const STATUS_UNAUTHORIZED = 401;
+const STATUS_TOO_MANY_REQUESTS = 429;
 const STATUS_SERVICE_UNAVAILABLE = 503;
 const STATUS_BAD_GATEWAY = 502;
 // 프롬프트에 들어가는 문자열 상한 — 임의 JSON 주입 방지 (6차 조사 B1)
@@ -48,11 +49,20 @@ export async function POST(request: Request) {
 
   // 로그인 사용자만 AI 호출 가능 (6차 조사 B1)
   // Signed-in users only (audit 6 B1)
-  const user = await getUserFromRequest(request);
-  if (!user) {
+  const authed = await getUserFromRequest(request);
+  if (!authed) {
     return Response.json(
       { error: "AI 요약은 로그인 후 사용할 수 있어요. 설정에서 로그인해 주세요." } satisfies AiErrorResponse,
       { status: STATUS_UNAUTHORIZED },
+    );
+  }
+
+  // 일일 사용량 상한 — 초과 시 429 (rate limit 1차)
+  // Daily usage cap — 429 when exceeded (first-stage rate limit)
+  if (!(await consumeDailyAiQuota(authed.token))) {
+    return Response.json(
+      { error: "오늘의 AI 사용량을 모두 썼어요. 내일 다시 이용해 주세요." } satisfies AiErrorResponse,
+      { status: STATUS_TOO_MANY_REQUESTS },
     );
   }
 
