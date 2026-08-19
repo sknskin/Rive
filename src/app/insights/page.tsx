@@ -6,7 +6,6 @@ import WeekdayBars from "@/components/insights/WeekdayBars";
 import WrappedSheet from "@/components/insights/WrappedSheet";
 import YearHeatmap from "@/components/insights/YearHeatmap";
 import { computeWrappedStats, type WrappedScope, type WrappedStats } from "@/lib/wrapped";
-import type { Book } from "@/lib/types";
 import { READING_SPEED_WINDOW_DAYS } from "@/lib/constants";
 import { dayRange, formatDurationCompact, formatDurationShort } from "@/lib/format";
 import {
@@ -132,15 +131,15 @@ export default function InsightsPage() {
   async function openWrapped(scope: WrappedScope) {
     try {
       const repository = getRepository();
-      const sessions = await repository.listAllSessions();
-      const userBooks = await repository.listUserBooks();
-      const booksById = new Map<string, Book>();
-      for (const bookId of new Set(sessions.map((session) => session.bookId))) {
-        const book = await repository.getBook(bookId);
-        if (book) {
-          booksById.set(bookId, book);
-        }
-      }
+      // 독립 조회는 병렬로, 책은 배치로 — N+1 방지 (6차 조사 D3·D4)
+      // Parallel independent reads and batched books — avoids N+1 (audit 6 D3, D4)
+      const [sessions, userBooks] = await Promise.all([
+        repository.listAllSessions(),
+        repository.listUserBooks(),
+      ]);
+      const booksById = await repository.listBooksByIds(
+        sessions.map((session) => session.bookId),
+      );
       setWrappedStats(computeWrappedStats(scope, new Date(), sessions, userBooks, booksById));
     } catch (error) {
       console.error("[Insights] failed to open wrapped:", error);
@@ -154,24 +153,35 @@ export default function InsightsPage() {
     async function load() {
       const repository = getRepository();
       try {
-        const sessions = await repository.listAllSessions();
-        const userBooks = await repository.listUserBooks();
-        const loadedGoals = await repository.getGoals();
+        // 서로 독립적인 조회는 병렬로 실행한다 (6차 조사 D4)
+        // Run independent reads in parallel (audit 6 D4)
+        const [sessions, userBooks, loadedGoals] = await Promise.all([
+          repository.listAllSessions(),
+          repository.listUserBooks(),
+          repository.getGoals(),
+        ]);
 
-        // 장르 분포용 — 세션에 등장한 책의 카테고리를 모은다
-        // For genre distribution — gather categories of books that have sessions
+        // 지난해에 세운 목표는 만료로 취급한다 — 새해에는 목표를 다시 세우도록 유도 (연도 롤오버)
+        // Goals saved for a past year are treated as expired so a new year starts fresh (year rollover)
+        const currentYear = new Date().getFullYear();
+        const activeGoals =
+          loadedGoals && loadedGoals.year === currentYear ? loadedGoals : null;
+
+        // 장르 분포용 — 세션에 등장한 책의 카테고리를 배치 조회로 모은다
+        // For genre distribution — gather session books' categories via batch lookup
+        const sessionBooks = await repository.listBooksByIds(
+          sessions.map((session) => session.bookId),
+        );
         const categoriesByBookId = new Map<string, string[]>();
-        const uniqueBookIds = [...new Set(sessions.map((session) => session.bookId))];
-        for (const bookId of uniqueBookIds) {
-          const book = await repository.getBook(bookId);
-          if (book?.categories && book.categories.length > 0) {
-            categoriesByBookId.set(bookId, book.categories);
+        for (const book of sessionBooks.values()) {
+          if (book.categories && book.categories.length > 0) {
+            categoriesByBookId.set(book.id, book.categories);
           }
         }
 
         if (!cancelled) {
           setData(buildInsights(sessions, userBooks, categoriesByBookId));
-          setGoals(loadedGoals ?? null);
+          setGoals(activeGoals);
           setLoadError("");
         }
       } catch (error) {
@@ -401,7 +411,11 @@ export default function InsightsPage() {
         stats={wrappedStats}
       />
 
-      <BottomSheet open={goalsSheetOpen} onClose={() => setGoalsSheetOpen(false)}>
+      <BottomSheet
+        open={goalsSheetOpen}
+        onClose={() => setGoalsSheetOpen(false)}
+        label="독서 목표 설정"
+      >
         <GoalsForm
           existing={goals}
           onSaved={() => {
@@ -437,7 +451,14 @@ function GoalBar({
           {unit}
         </span>
       </div>
-      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-fill">
+      <div
+        role="progressbar"
+        aria-label={`${label} 목표 진행률`}
+        aria-valuenow={percent}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-fill"
+      >
         <div
           className="h-full rounded-full bg-tint transition-[width] duration-500"
           style={{ width: `${percent}%` }}
