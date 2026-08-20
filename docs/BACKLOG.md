@@ -1,8 +1,13 @@
 # Rive 백로그
 
-최종 갱신: 2026-08-19 (8차 품질 전수조사·원자 저장·접근성·CI/E2E 하드닝)
+최종 갱신: 2026-08-20 (운영·권한 상태 재검증 및 세션 인수인계 정리)
 근거: 소스·화면·데이터 계약·API·접근성·성능·배포 경계를 다중 전수조사하고 실패 주입·실제 브라우저·PostgreSQL 17로 검증.
 모든 항목은 코드에서 확인된 사실 기반이며, 항목마다 스펙 참조(§)와 근거를 병기한다.
+
+> **읽는 법:** 이 문서는 조사·구현 순서를 보존하는 연대기다. 중간의 “미착수”, “잔여”,
+> 테스트 개수는 당시 스냅샷이며 뒤의 완료 기록이 이를 대체할 수 있다. 현재 실행 상태와
+> 다음 작업 순서는 [`HANDOFF.md`](./HANDOFF.md), 현행 잔여는 이 문서 최하단 9차 섹션을
+> 단일 기준으로 사용한다.
 
 ## 현재 상태 요약
 
@@ -171,7 +176,7 @@ DB 확인 후 삭제 정리) → 로그아웃 → 로컬 모드 복귀 + 로컬 
   다른 계정 로그인 시 이관 프롬프트 재노출 실측 확인. 업로더는 uploadDomainTables로
   분리(이관·서버 가져오기 공유).
 
-잔여: **Vercel 배포 — 사용자 지시로 최후순위 보류, 준비 완료** (docs/DEPLOY.md).
+당시 잔여였던 Vercel 배포는 2026-08-19 완료됐다(`docs/DEPLOY.md` 참조).
 후속(보류 유지): books 공유 카탈로그(규모 확대 시), 플랫폼 레벨 rate limit(WAF —
 남용 관측 시), Kakao OAuth.
 
@@ -219,8 +224,8 @@ DB 확인 후 삭제 정리) → 로그아웃 → 로컬 모드 복귀 + 로컬 
 - **사용자 액션 필요**: 마스터 스펙 §70~77·§72~73 원문을 docs/에 추가(스키마 확정 전제),
   배포 플랫폼 결정(rate limit 수단이 플랫폼 종속), Supabase 프로젝트 생성.
 
-### 4. 배포 (§78) — 미착수
-- Vercel/Cloudflare 중 선택, 환경변수(KAKAO/GEMINI) 등록 필요.
+### 4. 배포 (§78) — **완료 (2026-08-19)**
+- Vercel Hobby Production에 배포했고 환경변수와 GitHub `main` 자동 배포를 연결했다.
 
 ---
 
@@ -490,8 +495,8 @@ Up Next, 예상 완독일, 무드 추천, 계정 동기화. **AI 취향 분석+�
   vitest include에 .test.tsx 추가(파일별 jsdom docblock), 스모크 7개(RatingStars 상호작용,
   BookCover 플레이스홀더, 차트 빈 상태, PageSkeleton 접근성). **총 테스트 72개.**
 
-### 남은 과제 (최종)
-- **Vercel 배포** — 유일한 대기 항목(사용자 최후순위 지시). docs/DEPLOY.md 준비 완료.
+### 당시 남은 과제 (이후 배포 완료 기록이 대체)
+- **Vercel 배포** — 2026-08-19 완료. `docs/DEPLOY.md` 참조.
 - 배포와 결합된 것: 독서 리마인더(웹 푸시 — HTTPS 도메인+서비스워커 필수), D8 쿼터 환불
   (service role 키), 플랫폼 WAF rate limit.
 - 외부 콘솔 필요: Kakao OAuth(카카오 개발자 콘솔 앱 등록).
@@ -516,7 +521,7 @@ Up Next, 예상 완독일, 무드 추천, 계정 동기화. **AI 취향 분석+�
   export 유지가 올바름 — 종결.
 - 마이그레이션 파일: supabase/migrations/20260819020000_atomic_import.sql.
 
-**이 시점의 잔여 = Vercel 배포(사용자 로그인 필요) + 배포 결합 3건(리마인더·쿼터 환불·
+**당시 잔여 = Vercel 배포(이후 완료) + 배포 결합 3건(리마인더·쿼터 환불·
 WAF) + 외부 콘솔(Kakao OAuth) + 대형(북클럽·Advanced Insights·공유 카탈로그) +
 바코드 실기기 확인.**
 
@@ -568,3 +573,32 @@ WAF) + 외부 콘솔(Kakao OAuth) + 대형(북클럽·Advanced Insights·공유 
   Kakao OAuth, 실기기 바코드·카메라 검증.
 - **제품 정책/대형 기능**: 재독 주기, 리마인더, 계정 삭제·비밀번호 재설정·개인정보
   문구, strict nonce CSP, 북클럽·버디 리드, 공유 카탈로그, Advanced Insights.
+
+---
+
+## 9차 문서·운영 인수인계 재검증 (2026-08-20)
+
+### 새로 실측한 현재 상태
+
+- `npm run verify`: Vitest 22파일/132건, coverage 28.55/25.45/23.08/28.86%, lint,
+  typecheck, Next.js production build 전부 통과.
+- `CI=1 npm run test:e2e`: Chromium desktop/mobile 4건 통과.
+- 운영 홈 HTTP 200, 비로그인 AI profile HTTP 401, 보안 헤더 재확인.
+- Vercel deployment `5984060799`가 commit `a24e212`를 Production `success`로 제공함을
+  GitHub deployment API로 확인.
+- 운영 `save_reading_session` RPC를 전체 parameter name으로 호출해도 `PGRST202`임을
+  확인. 따라서 8차의 “운영 migration 미적용” 판정은 유효하다.
+- GitHub 권한 재확인: `sknskin`은 저장소 push 권한은 있으나 OAuth `workflow` scope가
+  없고, `dev-virgo`는 scope는 있으나 저장소 push 권한이 없다.
+
+### 현행 잔여 — 다음 세션 실행 순서
+
+1. **운영 DB 인증 확보 후** `20260819030000_atomic_reading_sessions.sql` 적용.
+2. 전체 인자 RPC probe와 로그인 save/update/delete/active 보존 E2E로 운영 원자성 확인.
+3. 그 검증이 끝난 뒤에만 `PGRST202` 호환 경로 제거.
+4. `sknskin` OAuth에 `workflow` scope 승인 후 `.github/ci.yml`을
+   `.github/workflows/ci.yml`로 이동·푸시하고 실제 Actions run 통과 확인.
+5. 나머지 외부 권한·제품 과제는 사용자 지시가 생길 때 우선순위를 정해 진행.
+
+명령, 기대 오류, 관련 파일, 금지할 오판까지 포함한 상세 인수인계는
+[`HANDOFF.md`](./HANDOFF.md)에 기록했다. 다음 세션은 반드시 해당 문서부터 읽는다.

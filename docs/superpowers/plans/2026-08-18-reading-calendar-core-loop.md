@@ -4,7 +4,8 @@
 > 그대로이며 이후 변경을 반영하지 않는다. 현행과 다른 대표 지점 — `getLastSessionForBook`
 > 삭제됨(현재 `UserBook.currentPage` 사용), 하단 5탭 TabBar는 내비게이션 v2(모바일 드로어 +
 > 데스크톱 상단 바)로 대체됨, `greetingForHour`는 `greetingForDate`로 변경됨,
-> `page.module.css`는 사용자 승인 후 삭제됨. **최신 상태의 단일 기준은 `docs/BACKLOG.md`.**
+> `page.module.css`는 사용자 승인 후 삭제됨. **최신 상태는 `docs/HANDOFF.md`, 최신 잔여는
+> `docs/BACKLOG.md` 최하단을 기준으로 한다.**
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

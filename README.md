@@ -6,6 +6,17 @@ Rive는 독서 시간과 페이지를 최소한의 입력으로 기록하고, �
 - 로컬 모드: 비로그인 상태에서 IndexedDB(Dexie) 저장
 - 계정 모드: Supabase Auth·Postgres·RLS·Realtime 동기화
 
+## 현재 운영 상태
+
+- 2026-08-20 기준 로컬 전체 검증과 desktop/mobile E2E 통과
+- Vercel Production 정상 운영, `main` push 시 자동 재배포
+- 운영 Supabase에는 원자 독서 세션 RPC migration이 아직 미적용
+- GitHub Actions workflow는 OAuth `workflow` scope가 없어 아직 비활성
+
+새 세션에서 작업을 이어갈 때는 [`docs/HANDOFF.md`](./docs/HANDOFF.md)를 먼저 읽어야
+합니다. 현재 잔여와 이력은 [`docs/BACKLOG.md`](./docs/BACKLOG.md), 배포·운영 절차는
+[`docs/DEPLOY.md`](./docs/DEPLOY.md)에 있습니다.
+
 ## 주요 기능
 
 - READ 타이머 → 종료 페이지·메모 저장 → Today/Calendar 반영
@@ -54,4 +65,4 @@ npm run verify
 
 Supabase 스키마는 [`supabase/migrations`](./supabase/migrations), 운영 순서는 [`docs/DEPLOY.md`](./docs/DEPLOY.md)에 있습니다. `main` push는 연동된 Vercel production 배포를 시작합니다.
 
-신규 독서 세션 RPC migration이 운영 DB에 적용되기 전에도 중복 없이 재시도 가능한 호환 경로가 동작하지만, 완전한 서버 원자성은 `20260819030000_atomic_reading_sessions.sql` 적용 후 활성화됩니다.
+신규 독서 세션 RPC migration이 운영 DB에 적용되기 전에도 중복 없이 재시도 가능한 호환 경로가 동작하지만, 완전한 서버 원자성은 `20260819030000_atomic_reading_sessions.sql` 적용 후 활성화됩니다. 적용·검증 전에는 호환 경로를 제거하면 안 됩니다.
